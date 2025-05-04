@@ -114,13 +114,13 @@ const ProductMovements: React.FC = () => {
                     </tr>
                 ) : (
                     movements.map((movement) => (
-                        <tr key={movement.movementId}>
+                        <tr key={movement.id}>
                             <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm text-gray-900">
-                                    {new Date(movement.transactionDate).toLocaleDateString('es-PA')}
+                                    {new Date(movement.date).toLocaleDateString('es-PA')}
                                 </div>
                                 <div className="text-xs text-gray-500">
-                                    {new Date(movement.transactionDate).toLocaleTimeString('es-PA')}
+                                    {new Date(movement.date).toLocaleTimeString('es-PA')}
                                 </div>
                             </td>
                             <td className="px-6 py-4">

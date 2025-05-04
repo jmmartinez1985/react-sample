@@ -176,9 +176,9 @@ export const generateMockMovements = (productId: string, count: number = 15): Pr
         };
 
         movements.push({
-            movementId: `MOV${Date.now().toString().substring(7)}${i}`,
+            id: `MOV${Date.now().toString().substring(7)}${i}`,
             productId,
-            transactionDate: date.toISOString(),
+            date: date.toISOString(),
             description: randomDescription,
             amount,
             balance: parseFloat(currentBalance.toFixed(2)),
@@ -190,7 +190,7 @@ export const generateMockMovements = (productId: string, count: number = 15): Pr
 
     // Ordenar por fecha, del más reciente al más antiguo
     return movements.sort((a, b) =>
-        new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime()
+        new Date(b.date).getTime() - new Date(a.date).getTime()
     );
 };
 

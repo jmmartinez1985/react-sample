@@ -17,8 +17,8 @@ export enum ProductStatus {
 // Tipo de titularidad
 export enum OwnershipType {
     PRIMARY = 'PRIMARY',
-    AND = 'AND',
-    OR = 'OR'
+    SECONDARY = 'SECONDARY',
+    JOINT = 'JOINT'
 }
 
 // Código de estado de la operación
@@ -34,7 +34,7 @@ export enum StatusCode {
 }
 
 // Interfaz para un producto bancario
-export interface Product {
+/*export interface Product {
     productId: string;
     productType: ProductType;
     productName: string;
@@ -45,7 +45,7 @@ export interface Product {
     ownershipType: OwnershipType;
     openDate?: string;
     additionalData?: Record<string, any>;
-}
+}*/
 
 // Interfaz para el estado de la operación
 export interface Status {
@@ -77,7 +77,7 @@ export interface ErrorProductsResponse {
     requestId?: string;
 }
 
-// Interfaz para los movimientos de un producto
+/*// Interfaz para los movimientos de un producto
 export interface ProductMovement {
     movementId: string;
     productId: string;
@@ -86,6 +86,55 @@ export interface ProductMovement {
     amount: number;
     balance: number;
     type: 'CREDIT' | 'DEBIT';
+    category?: string;
+    reference?: string;
+}*/
+
+
+// Interfaz para datos adicionales de los productos
+export interface ProductAdditionalData {
+    [key: string]: any;
+    interestRate?: number;
+    lastInterestDate?: string;
+    maxMonthlyWithdrawals?: number;
+    availableWithdrawals?: number;
+    nextPaymentDate?: string;
+    monthlyPayment?: number;
+    originalAmount?: number;
+    term?: number | string;
+    remainingPayments?: number;
+    guaranteeAddress?: string;
+    checkbookAvailable?: boolean;
+    debitCardNumber?: string;
+    overdraftLimit?: number;
+    maturityDate?: string;
+    automaticRenewal?: boolean;
+    interestPaymentType?: string;
+}
+
+// Interfaz para productos
+export interface Product {
+    productId: string;
+    productType: ProductType;
+    productName: string;
+    accountNumber: string;
+    balance: number;
+    currency: string;
+    status: ProductStatus;
+    ownershipType: OwnershipType;
+    openDate: string;
+    additionalData?: ProductAdditionalData;
+}
+
+// Interfaz para movimientos de productos
+export interface ProductMovement {
+    id: string;
+    productId: string;
+    date: string;
+    description: string;
+    amount: number;
+    balance: number;
+    type: 'DEBIT' | 'CREDIT';
     category?: string;
     reference?: string;
 }

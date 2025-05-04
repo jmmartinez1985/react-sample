@@ -10,9 +10,9 @@ import ForgotPassword from '@pages/ForgotPassword';
 import ResetPassword from '@pages/ResetPassword';
 
 // Páginas de la aplicación
-import Dashboard from '@pages/Dashboard';
+import _Dashboard from '@pages/Dashboard.tsx';
 import UserProfile from '@pages/UserProfile';
-import ProductDetail from '@pages/ProductDetail';
+import _ProductDetail from '@pages/ProductDetail.tsx';
 import ProductMovements from '@pages/ProductMovements';
 import NotFound from '@pages/NotFound';
 
@@ -30,11 +30,11 @@ const AuthRouter: React.FC = () => {
                     <Route path="/reset-password" element={<ResetPassword />} />
 
                     {/* Rutas protegidas */}
-                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/dashboard" element={<_Dashboard />} />
                     <Route path="/profile" element={<UserProfile />} />
 
                     {/* Nuevas rutas para productos */}
-                    <Route path="/products/:productId/detail" element={<ProductDetail />} />
+                    <Route path="/products/:productId/detail" element={<_ProductDetail />} />
                     <Route path="/products/:productId/movements" element={<ProductMovements />} />
 
                     {/* Redirección del inicio */}

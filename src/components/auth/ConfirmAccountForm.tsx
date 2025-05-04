@@ -93,9 +93,9 @@ const ConfirmAccountForm: React.FC = () => {
             )}
 
             <Input
-                label="Email"
+                label="Username"
                 id="username"
-                type="email"
+                type="text"
                 placeholder="ejemplo@correo.com"
                 error={errors.username?.message}
                 register={register('username')}
