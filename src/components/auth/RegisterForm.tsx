@@ -1,27 +1,30 @@
+// src/components/auth/RegisterForm.tsx con los cambios necesarios
+
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
 import useAuth from '@hooks/useAuth';
+import customerService from '@services/customerService';
 import Input from '@components/ui/Input';
 import Button from '@components/ui/Button';
 import Alert from '@components/ui/Alert';
 
-// Esquema de validación
+// Esquema de validación actualizado
 const registerSchema = z.object({
-    // Username como campo independiente (puede ser diferente del email)
+    // Username y contraseña
     username: z.string()
         .min(3, 'El nombre de usuario debe tener al menos 3 caracteres')
         .max(50, 'El nombre de usuario no puede exceder 50 caracteres')
         .regex(/^[a-zA-Z0-9_.-]+$/, 'El nombre de usuario solo puede contener letras, números, puntos, guiones y guiones bajos'),
 
-    // Email como campo independiente
+    // Email
     email: z.string()
         .email('Debe ser un email válido')
         .min(1, 'El email es requerido'),
 
-    // Contraseña con validaciones de seguridad
+    // Contraseña
     password: z.string()
         .min(8, 'La contraseña debe tener al menos 8 caracteres')
         .regex(/[A-Z]/, 'La contraseña debe contener al menos una letra mayúscula')
@@ -32,7 +35,13 @@ const registerSchema = z.object({
     confirmPassword: z.string().min(1, 'Confirma tu contraseña'),
 
     // Nombre completo (opcional)
-    name: z.string().optional()
+    name: z.string().optional(),
+
+    // Nuevos campos para la identificación
+    identificationType: z.enum(['CEDULA', 'PASAPORTE', 'RUC'], {
+        errorMap: () => ({ message: 'Seleccione un tipo de identificación válido' }),
+    }),
+    identificationNumber: z.string().min(1, 'El número de identificación es requerido')
 }).refine((data) => data.password === data.confirmPassword, {
     message: 'Las contraseñas no coinciden',
     path: ['confirmPassword'],
@@ -46,6 +55,7 @@ const RegisterForm: React.FC = () => {
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const [customerId, setCustomerId] = useState<string | null>(null);
 
     const {
         register,
@@ -60,12 +70,35 @@ const RegisterForm: React.FC = () => {
             setIsSubmitting(true);
             setError(null);
 
-            // Preparar los datos para el registro
+            // Validar la identificación del cliente antes de registrarlo
+            try {
+                const customerResponse = await customerService.validateCustomerIdentification(
+                    data.identificationType,
+                    data.identificationNumber
+                );
+
+                // Si la respuesta es exitosa, obtenemos el ID del cliente
+                if (customerResponse.data && customerResponse.data.customerId) {
+                    setCustomerId(customerResponse.data.customerId);
+                } else {
+                    throw { error: 'No se pudo verificar la identificación del cliente' };
+                }
+            } catch (customerError: any) {
+                setError(customerError.error || 'Error al validar la identificación. Verifique sus datos.');
+                setIsSubmitting(false);
+                return;
+            }
+
+            // Preparar los datos para el registro incluyendo los nuevos campos
             const userData = {
                 username: data.username,
                 password: data.password,
                 email: data.email,
-                name: data.name
+                name: data.name,
+                // Incluir los campos adicionales como atributos personalizados
+                idtype: data.identificationType,
+                idnumber: data.identificationNumber,
+                customerid: customerId
             };
 
             // Llamar al servicio de registro
@@ -140,6 +173,45 @@ const RegisterForm: React.FC = () => {
                 placeholder="Juan Pérez"
                 error={errors.name?.message}
                 register={register('name')}
+            />
+
+            {/* Nuevos campos para tipo y número de identificación */}
+            <div className="w-full mb-4">
+                <label htmlFor="identificationType" className="block text-sm font-medium text-gray-700 mb-1">
+                    Tipo de Identificación <span className="text-red-500">*</span>
+                </label>
+                <select
+                    id="identificationType"
+                    className={`
+                        form-select
+                        w-full px-3 py-2 
+                        border rounded-md shadow-sm 
+                        bg-white
+                        placeholder-gray-400 
+                        focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500
+                        disabled:bg-gray-100 disabled:text-gray-500
+                        ${errors.identificationType ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'} 
+                    `}
+                    {...register('identificationType')}
+                >
+                    <option value="">Seleccionar...</option>
+                    <option value="CEDULA">Cédula</option>
+                    <option value="PASAPORTE">Pasaporte</option>
+                    <option value="RUC">RUC</option>
+                </select>
+                {errors.identificationType && (
+                    <p className="mt-1 text-sm text-red-600">{errors.identificationType.message}</p>
+                )}
+            </div>
+
+            <Input
+                label="Número de Identificación"
+                id="identificationNumber"
+                type="text"
+                placeholder="Ingrese su número de identificación"
+                error={errors.identificationNumber?.message}
+                register={register('identificationNumber')}
+                required
             />
 
             <Input

@@ -4,7 +4,10 @@ import { setupMockProductService } from '@/utils/mockData';
 
 // Configuración de la API
 // @ts-ignore
-const API_URL: string = import.meta.env.VITE_API_URL || 'https://api-dev.banco.com/v1';
+// const API_URL: string = import.meta.env.VITE_API_URL || 'https://api-dev.banco.com/v1';
+// @ts-ignore
+const API_URL: string = import.meta.env.CUSTOMER_API_URL || 'https://be2v6ejpwf.execute-api.us-east-1.amazonaws.com/dev/v1';
+
 // @ts-ignore
 const USE_MOCK_DATA: boolean = process.env.NODE_ENV === 'development';
 
