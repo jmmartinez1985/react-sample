@@ -164,6 +164,10 @@ const UserProfile: React.FC = () => {
                                     <p className="text-sm font-medium text-gray-500">ID de usuario</p>
                                     <p className="text-gray-900">{user?.attributes?.sub}</p>
                                 </div>
+                                <div>
+                                    <p className="text-sm font-medium text-gray-500">ID de Banco</p>
+                                    <p className="text-gray-900">{user?.attributes?.["custom:customerid"]}</p>
+                                </div>
                             </div>
                         )}
                     </Card>
