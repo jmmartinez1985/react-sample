@@ -222,7 +222,7 @@ const Dashboard: React.FC = () => {
 
                 // En un entorno real, obtenemos el customerId del servicio de autenticación
                 // Por ahora, usamos uno fijo para demostración
-                const customerId = user?.attributes?.sub || 'CUS123456789';
+                const customerId = user?.attributes?.["custom:customerid"];
                 localStorage.setItem('customerId', customerId);
 
                 // Simulamos una llamada a la API
