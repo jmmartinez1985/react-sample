@@ -16,7 +16,7 @@ import {
 
 // Configuración de la API
 // @ts-ignore
-const API_URL: string = import.meta.env.VITE_API_URL || 'https://pt17v6dj00.execute-api.us-east-1.amazonaws.com/dev';
+const API_URL: string = import.meta.env.OAUTH_API_URL || 'https://pt17v6dj00.execute-api.us-east-1.amazonaws.com/dev';
 
 // Instancia de axios con configuración común
 const apiClient: AxiosInstance = axios.create({
@@ -178,6 +178,7 @@ const authService = {
     getUserInfo: async (): Promise<User> => {
         try {
             const response = await apiClient.get<User>('/auth/user-info');
+            console.log(response.data);
             return response.data;
         } catch (error) {
             if (axios.isAxiosError(error) && error.response) {

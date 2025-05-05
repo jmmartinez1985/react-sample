@@ -92,3 +92,33 @@ export interface AuthContextType {
     resetPassword: (username: string, code: string, newPassword: string) => Promise<ResetPasswordResponse>;
     logout: () => Promise<void>;
 }
+
+// Para la solicitud de cambio de contraseña
+export interface ChangePasswordRequest {
+    oldPassword: string;
+    newPassword: string;
+}
+
+// Para la respuesta exitosa
+export interface ChangePasswordSuccessResponse {
+    status: Status;
+    data: {
+        timestamp: string;
+    };
+}
+
+// Para el estado de la operación
+export interface Status {
+    code: string;
+    message: string;
+}
+
+// Para la respuesta de error
+export interface ErrorResponseExtended {
+    status: Status;
+    error: {
+        code: string;
+        message: string;
+        details?: string;
+    };
+}

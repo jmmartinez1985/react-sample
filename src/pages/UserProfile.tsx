@@ -1,3 +1,4 @@
+// src/pages/UserProfile.tsx
 import React, { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import useAuth from '@hooks/useAuth';
@@ -7,11 +8,13 @@ import Button from '@components/ui/Button';
 import Input from '@components/ui/Input';
 import Card from '@components/ui/Card';
 import Alert from '@components/ui/Alert';
+import ChangePasswordForm from '@components/auth/ChangePasswordForm';
 
 const UserProfile: React.FC = () => {
     const navigate = useNavigate();
     const { isAuthenticated, isLoading, user, logout } = useAuth();
     const [isEditing, setIsEditing] = useState<boolean>(false);
+    const [isChangingPassword, setIsChangingPassword] = useState<boolean>(false);
     const [success, setSuccess] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +55,25 @@ const UserProfile: React.FC = () => {
     // Función para volver al dashboard
     const handleBackToDashboard = () => {
         navigate('/dashboard');
+    };
+
+    // Funciones para manejar cambio de contraseña
+    const handleChangePasswordClick = () => {
+        setIsChangingPassword(true);
+    };
+
+    const handlePasswordChangeSuccess = () => {
+        setIsChangingPassword(false);
+        setSuccess('Contraseña actualizada correctamente');
+
+        // Ocultar mensaje después de 3 segundos
+        setTimeout(() => {
+            setSuccess(null);
+        }, 3000);
+    };
+
+    const handlePasswordChangeCancel = () => {
+        setIsChangingPassword(false);
     };
 
     return (
@@ -174,15 +196,29 @@ const UserProfile: React.FC = () => {
 
                     <Card className="p-6">
                         <h2 className="text-lg font-medium text-gray-900 mb-4">Seguridad</h2>
-                        <div className="space-y-4">
-                            <Button variant="outline">
-                                Cambiar contraseña
-                            </Button>
 
-                            <Button variant="danger">
-                                Eliminar cuenta
-                            </Button>
-                        </div>
+                        {isChangingPassword ? (
+                            <div className="mt-4">
+                                <h3 className="text-md font-medium text-gray-800 mb-4">Cambiar Contraseña</h3>
+                                <ChangePasswordForm
+                                    onSuccess={handlePasswordChangeSuccess}
+                                    onCancel={handlePasswordChangeCancel}
+                                />
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <Button
+                                    variant="outline"
+                                    onClick={handleChangePasswordClick}
+                                >
+                                    Cambiar contraseña
+                                </Button>
+
+                                <Button variant="danger">
+                                    Eliminar cuenta
+                                </Button>
+                            </div>
+                        )}
                     </Card>
                 </div>
             </main>
