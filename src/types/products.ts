@@ -212,7 +212,7 @@ export interface PaginationInfo {
 export interface LoanPayment {
     paymentId: string;
     paymentDate: string;
-    amount: number;
+    paymentAmount: number;
     currency: string;
     principalAmount?: number;
     interestAmount?: number;
