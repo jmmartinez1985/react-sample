@@ -77,20 +77,6 @@ export interface ErrorProductsResponse {
     requestId?: string;
 }
 
-/*// Interfaz para los movimientos de un producto
-export interface ProductMovement {
-    movementId: string;
-    productId: string;
-    transactionDate: string;
-    description: string;
-    amount: number;
-    balance: number;
-    type: 'CREDIT' | 'DEBIT';
-    category?: string;
-    reference?: string;
-}*/
-
-
 // Interfaz para datos adicionales de los productos
 export interface ProductAdditionalData {
     [key: string]: any;
@@ -112,20 +98,6 @@ export interface ProductAdditionalData {
     interestPaymentType?: string;
 }
 
-// Interfaz para productos
-export interface Product {
-    productId: string;
-    productType: ProductType;
-    productName: string;
-    accountNumber: string;
-    balance: number;
-    currency: string;
-    status: ProductStatus;
-    ownershipType: OwnershipType;
-    openDate: string;
-    additionalData?: ProductAdditionalData;
-}
-
 // Interfaz para movimientos de productos
 export interface ProductMovement {
     id: string;
@@ -137,4 +109,115 @@ export interface ProductMovement {
     type: 'DEBIT' | 'CREDIT';
     category?: string;
     reference?: string;
+}
+
+
+// src/types/product.types.ts
+
+export interface Product {
+    productId: string;
+    productType: string;
+    productName: string;
+    accountNumber: string;
+    balance?: number;
+    currency?: string;
+    status?: string;
+    ownershipType: string;
+    openDate?: string;
+    additionalData?: any;
+}
+
+export interface CustomerProducts {
+    customerId: string;
+    customerName?: string;
+    products: Product[];
+    lastUpdateDate?: string;
+}
+
+export interface BalanceData {
+    accountId: string;
+    availableBalance: number;
+    currentBalance: number;
+    currency: string;
+    lastUpdateDateTime: string;
+    accountType: string;
+}
+
+export interface FixedTermAccountData {
+    accountId: string;
+    accountType: string;
+    balance: number;
+    currency: string;
+    startDate: string;
+    maturityDate: string;
+    interestRate: number;
+    term: number;
+    status: string;
+    customer?: CustomerInfo;
+    interestDetails?: InterestDetails;
+}
+
+export interface CustomerInfo {
+    customerId: string;
+    name: string;
+    documentNumber: string;
+    documentType: string;
+}
+
+export interface InterestDetails {
+    interestPayment: string;
+    interestEarned: number;
+    nextInterestPaymentDate: string;
+    withholding: number;
+}
+
+export interface LoanBalanceData {
+    loanId: string;
+    principalBalance: number;
+    interestBalance: number;
+    totalAmountDue: number;
+    nextPaymentAmount: number;
+    nextPaymentDate: string;
+    currency: string;
+    interestRate: number;
+    loanType: string;
+    loanStatus: string;
+    lastUpdateDateTime: string;
+    remainingTermMonths?: number;
+    totalPaidToDate?: number;
+}
+
+export interface Transaction {
+    transactionId: string;
+    accountId: string;
+    transactionDate: string;
+    valueDate: string;
+    amount: number;
+    currency: string;
+    description: string;
+    transactionType: string;
+    balance: number;
+    reference?: string;
+}
+
+export interface PaginationInfo {
+    totalRecords: number;
+    totalPages: number;
+    currentPage: number;
+    pageSize: number;
+    nextPage?: string;
+    previousPage?: string;
+}
+
+export interface LoanPayment {
+    paymentId: string;
+    paymentDate: string;
+    amount: number;
+    currency: string;
+    principalAmount?: number;
+    interestAmount?: number;
+    paymentMethod: string;
+    status: string;
+    referenceNumber?: string;
+    paymentLocation?: string;
 }

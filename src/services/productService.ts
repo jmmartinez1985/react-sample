@@ -1,19 +1,17 @@
-import axios, { AxiosInstance } from 'axios';
-import { Product, CustomerProductsData, SuccessProductsResponse, ProductMovement } from '@/types/products';
-import { setupMockProductService } from '@/utils/mockData';
+// src/services/productService.ts
 
-// Configuración de la API
-// @ts-ignore
-// const API_URL: string = import.meta.env.VITE_API_URL || 'https://api-dev.banco.com/v1';
-// @ts-ignore
-const API_URL: string = import.meta.env.CUSTOMER_API_URL || 'https://be2v6ejpwf.execute-api.us-east-1.amazonaws.com/dev/v1';
+import axios from 'axios';
 
 // @ts-ignore
-const USE_MOCK_DATA: boolean = process.env.NODE_ENV === 'development';
+const CUSTOMER_API_URL: string = import.meta.env.CUSTOMER_API_URL || 'https://be2v6ejpwf.execute-api.us-east-1.amazonaws.com/dev/v1';
+// @ts-ignore
+const ACCOUNT_API_URL: string = import.meta.env.ACCOUNT_API_URL|| 'https://3v69altpe9.execute-api.us-east-1.amazonaws.com/dev/v1';
+// @ts-ignore
+const LOAN_API_URL: string = import.meta.env.LOAN_API_URL|| 'https://zmtfurwns8.execute-api.us-east-1.amazonaws.com/dev/v1';
 
 // Instancia de axios con configuración común
-const apiClient: AxiosInstance = axios.create({
-    baseURL: API_URL,
+const apiClient = axios.create({
+    baseURL: CUSTOMER_API_URL,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -33,74 +31,104 @@ apiClient.interceptors.request.use(
     }
 );
 
-// Servicio de productos
-// @ts-ignore
-// @ts-ignore
-let productService = {
-    // Obtener productos del cliente
-    getCustomerProducts: async (customerId: string): Promise<CustomerProductsData> => {
-        try {
-            const response = await apiClient.get<SuccessProductsResponse>(
-                `/customers/${customerId}/products`
-            );
-            return response.data.data;
-        } catch (error) {
-            if (axios.isAxiosError(error) && error.response) {
-                throw error.response.data;
+// Función para crear clientes API para diferentes endpoints
+const createApiClient = (baseURL: string) => {
+    const client = axios.create({
+        baseURL,
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
+
+    client.interceptors.request.use(
+        (config) => {
+            const token = localStorage.getItem('access_token');
+            if (token) {
+                config.headers['Authorization'] = `Bearer ${token}`;
             }
-            throw { error: 'Error al obtener productos del cliente' };
+            return config;
+        },
+        (error) => {
+            return Promise.reject(error);
+        }
+    );
+
+    return client;
+};
+
+const accountApiClient = createApiClient(ACCOUNT_API_URL);
+const loanApiClient = createApiClient(LOAN_API_URL);
+
+const productService = {
+    // Obtener productos por cliente
+    getCustomerProducts: async (customerId: string) => {
+        try {
+            const response = await apiClient.get(`/customers/${customerId}/products`);
+            return response.data;
+        } catch (error) {
+            console.error('Error al obtener productos del cliente:', error);
+            throw error;
         }
     },
 
-    // Obtener detalle de un producto específico
-    getProductDetail: async (productId: string): Promise<Product> => {
+    // Obtener saldo de cuenta de ahorro
+    getSavingAccountBalance: async (accountId: string) => {
         try {
-            // Esta función simula la obtención del detalle de un producto
-            // En una implementación real, se haría una llamada a la API específica
-            // Por ahora, obtenemos todos los productos y filtramos
-            const customerId = localStorage.getItem('customerId') || '';
-            const response = await apiClient.get<SuccessProductsResponse>(
-                `/customers/${customerId}/products`
-            );
-
-            const product = response.data.data.products.find(
-                (p) => p.productId === productId
-            );
-
-            if (!product) {
-                throw { error: 'Producto no encontrado' };
-            }
-
-            return product;
+            const response = await accountApiClient.get(`/accounts/${accountId}/balance`);
+            return response.data;
         } catch (error) {
-            if (axios.isAxiosError(error) && error.response) {
-                throw error.response.data;
-            }
-            throw { error: 'Error al obtener detalles del producto' };
+            console.error('Error al obtener saldo de cuenta:', error);
+            throw error;
         }
     },
 
-    // Obtener movimientos de un producto
-    getProductMovements: async (productId: string): Promise<ProductMovement[]> => {
+    // Obtener información de depósito a plazo
+    getFixedTermAccount: async (accountId: string) => {
         try {
-            // Esta función simula la obtención de movimientos de un producto
-            // En una implementación real, se haría una llamada a la API
-            // Por ahora, retornamos un array vacío
-            console.log(productId)
-            return [];
+            const response = await accountApiClient.get(`/accounts/deposit-accounts/${accountId}`);
+            return response.data;
         } catch (error) {
-            if (axios.isAxiosError(error) && error.response) {
-                throw error.response.data;
-            }
-            throw { error: 'Error al obtener movimientos del producto' };
+            console.error('Error al obtener información de depósito a plazo:', error);
+            throw error;
+        }
+    },
+
+    // Obtener saldo de préstamo
+    getLoanBalance: async (loanId: string) => {
+        try {
+            const response = await loanApiClient.get(`/loans/${loanId}/balance`);
+            return response.data;
+        } catch (error) {
+            console.error('Error al obtener saldo de préstamo:', error);
+            throw error;
+        }
+    },
+
+    // Obtener movimientos de cuenta
+    getAccountTransactions: async (accountId: string, page = 1, pageSize = 10) => {
+        try {
+            const response = await accountApiClient.get(`/accounts/${accountId}/transactions`, {
+                params: { page, pageSize }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error al obtener movimientos de cuenta:', error);
+            throw error;
+        }
+    },
+
+    // Obtener historial de pagos de préstamo
+    getLoanPaymentsHistory: async (loanId: string, page = 1, pageSize = 10) => {
+        try {
+            const response = await loanApiClient.get(`/loans/${loanId}/payments-history`, {
+                params: { page, pageSize }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error al obtener historial de pagos de préstamo:', error);
+            throw error;
         }
     },
 };
-
-// En desarrollo usamos datos de prueba
-if (USE_MOCK_DATA) {
-    console.log('Usando datos de prueba para el servicio de productos');
-    productService = setupMockProductService(productService);
-}
 
 export default productService;

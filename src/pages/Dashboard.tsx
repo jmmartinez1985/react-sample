@@ -1,12 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+// src/pages/Dashboard.tsx
+
+import React, { useState, useEffect } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
 import useAuth from '@hooks/useAuth';
 import Header from '@components/layout/Header';
 import Footer from '@components/layout/Footer';
-import Card from '@components/ui/Card';
 import Button from '@components/ui/Button';
+import Card from '@components/ui/Card';
+import Spinner from '@components/ui/Spinner';
 import Alert from '@components/ui/Alert';
-import { Product, ProductType, ProductStatus, OwnershipType } from '@/types/products';
+import productService from '@services/productService';
+import notificationService from '@services/notificationService';
+import { Product, ProductType } from '@/types/products';
 import { User } from '@/types';
 
 // Definición de interfaces para props
@@ -42,10 +47,11 @@ const ProfileSummary: React.FC<ProfileSummaryProps> = ({ user, onViewProfile }) 
 
 interface ProductCardProps {
     product: Product;
+    onViewDetails: (productId: string, productType: string) => void;
 }
 
 // Componente para mostrar un producto financiero en forma de tarjeta
-const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails }) => {
     // Función para determinar el color del borde según el tipo de producto
     const getBorderColor = () => {
         switch (product.productType) {
@@ -182,16 +188,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 {/* Botones de acción */}
                 <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center">
                     <div className="space-x-2">
-                        <Link to={`/products/${product.productId}/detail`}>
-                            <Button variant="outline" size="sm">
-                                Detalle
-                            </Button>
-                        </Link>
-                        <Link to={`/products/${product.productId}/movements`}>
-                            <Button variant="outline" size="sm">
-                                Movimientos
-                            </Button>
-                        </Link>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onViewDetails(product.accountNumber, product.productType)}
+                        >
+                            Detalle
+                        </Button>
                     </div>
 
                     {/* Botón primario según el tipo de producto */}
@@ -207,12 +210,25 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     );
 };
 
+// Interfaz para las notificaciones
+interface Notification {
+    id: string;
+    title: string;
+    message: string;
+    type: 'info' | 'warning' | 'success' | 'error';
+    date: string;
+    read: boolean;
+}
+
 const Dashboard: React.FC = () => {
     const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
     const [products, setProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdate, setLastUpdate] = useState<string | null>(null);
+    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [isLoadingNotifications, setIsLoadingNotifications] = useState<boolean>(false);
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchProducts = async () => {
@@ -220,89 +236,85 @@ const Dashboard: React.FC = () => {
                 setIsLoading(true);
                 setError(null);
 
-                // En un entorno real, obtenemos el customerId del servicio de autenticación
-                // Por ahora, usamos uno fijo para demostración
+                // Obtener el ID del cliente desde el usuario autenticado
                 const customerId = user?.attributes?.["custom:customerid"];
-                localStorage.setItem('customerId', customerId);
 
-                // Simulamos una llamada a la API
-                // En producción, aquí iría la llamada real al servicio
-                setTimeout(() => {
-                    loadMockProducts();
-                }, 200);
+                if (!customerId) {
+                    setError("No se encontró el ID de cliente. Por favor, contacte con soporte.");
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Llamada real a la API usando el servicio
+                const response = await productService.getCustomerProducts(customerId);
+
+                if (response && response.data && response.data.products) {
+                    setProducts(response.data.products);
+                    setLastUpdate(new Date().toISOString());
+                } else {
+                    setProducts([]);
+                }
 
             } catch (err: any) {
-                setError(err?.error || 'Error al cargar productos. Intente más tarde.');
+                setError(err?.response?.data?.message || 'Error al cargar productos. Intente más tarde.');
                 console.error('Error fetching products:', err);
-                loadMockProducts();
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        const fetchNotifications = async () => {
+            try {
+                setIsLoadingNotifications(true);
+
+                // Obtener notificaciones usando un servicio API
+                const userId = user?.attributes?.sub;
+                if (userId) {
+                    const response = await notificationService.getUserNotifications(userId);
+                    if (response && response.data && response.data.notifications) {
+                        setNotifications(response.data.notifications);
+                    }
+                }
+            } catch (error) {
+                console.error('Error al cargar notificaciones:', error);
+                // Usar notificaciones de ejemplo si la API falla
+                setNotifications([
+                    {
+                        id: '1',
+                        title: 'Bienvenido a su banca en línea',
+                        message: 'Hemos renovado nuestra plataforma para mejorar su experiencia.',
+                        type: 'info',
+                        date: new Date().toISOString(),
+                        read: false
+                    },
+                    {
+                        id: '2',
+                        title: 'Próximo pago de préstamo',
+                        message: 'Su próximo pago vence el 15/05/2025.',
+                        type: 'warning',
+                        date: new Date().toISOString(),
+                        read: false
+                    }
+                ]);
+            } finally {
+                setIsLoadingNotifications(false);
             }
         };
 
         if (isAuthenticated && !authLoading) {
             fetchProducts();
+            fetchNotifications();
         }
     }, [isAuthenticated, authLoading, user]);
 
-    // Función para cargar productos de ejemplo
-    const loadMockProducts = () => {
-        const mockProducts: Product[] = [
-            {
-                productId: 'PRD123456',
-                productType: ProductType.SAVINGS,
-                productName: 'Cuenta de Ahorro',
-                accountNumber: '1234567890',
-                balance: 5000.75,
-                currency: 'USD',
-                status: ProductStatus.ACTIVE,
-                ownershipType: OwnershipType.PRIMARY,
-                openDate: '2023-05-15',
-                additionalData: { interestRate: 2.5, lastInterestDate: '2025-03-15' }
-            },
-            {
-                productId: 'PRD234567',
-                productType: ProductType.CREDIT,
-                productName: 'Préstamo Hipotecario',
-                accountNumber: '9876543210',
-                balance: 120000.00,
-                currency: 'USD',
-                status: ProductStatus.ACTIVE,
-                ownershipType: OwnershipType.PRIMARY,
-                openDate: '2022-01-10',
-                additionalData: { interestRate: 6.5, nextPaymentDate: '2025-05-15', monthlyPayment: 950.25 }
-            },
-            {
-                productId: 'PRD345678',
-                productType: ProductType.DEPOSIT,
-                productName: 'Cuenta Corriente',
-                accountNumber: '5555666677',
-                balance: 2500.50,
-                currency: 'USD',
-                status: ProductStatus.ACTIVE,
-                ownershipType: OwnershipType.PRIMARY,
-                openDate: '2023-11-20'
-            },
-            {
-                productId: 'PRD456789',
-                productType: ProductType.FIXED_TERM,
-                productName: 'Depósito a Plazo Fijo',
-                accountNumber: '8888999900',
-                balance: 10000.00,
-                currency: 'USD',
-                status: ProductStatus.ACTIVE,
-                ownershipType: OwnershipType.PRIMARY,
-                openDate: '2024-02-05',
-                additionalData: { interestRate: 3.8, maturityDate: '2025-02-05', term: '12 months' }
-            }
-        ];
-
-        setProducts(mockProducts);
-        setLastUpdate(new Date().toISOString());
-        setIsLoading(false);
+    // Función para navegar al detalle del producto
+    const handleViewDetails = (productId: string, productType: string) => {
+        navigate(`/products/${productId}`, { state: { productType } });
     };
 
     // Redirección al perfil de usuario
     const handleViewProfile = () => {
-        window.location.href = '/profile';
+        navigate('/profile');
     };
 
     // Si no está autenticado, redirigir al login
@@ -315,7 +327,7 @@ const Dashboard: React.FC = () => {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <div className="inline-block animate-spin h-8 w-8 border-4 border-primary-500 border-t-transparent rounded-full mb-4"></div>
+                    <Spinner size="lg" className="mb-4" />
                     <p className="text-gray-600">Verificando sesión...</p>
                 </div>
             </div>
@@ -348,7 +360,7 @@ const Dashboard: React.FC = () => {
                     {/* Estado de carga */}
                     {isLoading ? (
                         <div className="bg-white rounded-lg p-8 shadow text-center">
-                            <div className="inline-block animate-spin h-8 w-8 border-4 border-primary-500 border-t-transparent rounded-full mb-4"></div>
+                            <Spinner size="md" className="mx-auto mb-4" />
                             <p className="text-gray-600">Cargando sus productos...</p>
                         </div>
                     ) : error ? (
@@ -363,7 +375,11 @@ const Dashboard: React.FC = () => {
                     ) : (
                         <div className="grid grid-cols-1 gap-6">
                             {products.map((product) => (
-                                <ProductCard key={product.productId} product={product} />
+                                <ProductCard
+                                    key={product.productId}
+                                    product={product}
+                                    onViewDetails={handleViewDetails}
+                                />
                             ))}
                         </div>
                     )}
@@ -406,14 +422,48 @@ const Dashboard: React.FC = () => {
                     <Card className="p-6">
                         <h3 className="text-md font-medium text-gray-900 mb-4">Notificaciones</h3>
                         <div className="space-y-3">
-                            <div className="p-3 bg-blue-50 rounded-md border-l-4 border-blue-500">
-                                <h4 className="text-sm font-medium text-blue-800">Bienvenido a su banca en línea</h4>
-                                <p className="text-xs text-blue-700 mt-1">Hemos renovado nuestra plataforma para mejorar su experiencia.</p>
-                            </div>
-                            <div className="p-3 bg-gray-50 rounded-md">
-                                <h4 className="text-sm font-medium text-gray-800">Próximo pago de préstamo</h4>
-                                <p className="text-xs text-gray-600 mt-1">Su próximo pago vence el 15/05/2025.</p>
-                            </div>
+                            {isLoadingNotifications ? (
+                                <div className="text-center py-4">
+                                    <Spinner size="sm" className="mx-auto mb-2" />
+                                    <p className="text-sm text-gray-500">Cargando notificaciones...</p>
+                                </div>
+                            ) : notifications.length > 0 ? (
+                                notifications.map(notification => (
+                                    <div
+                                        key={notification.id}
+                                        className={`p-3 rounded-md ${
+                                            notification.type === 'info' ? 'bg-blue-50 border-l-4 border-blue-500' :
+                                                notification.type === 'warning' ? 'bg-yellow-50 border-l-4 border-yellow-500' :
+                                                    notification.type === 'success' ? 'bg-green-50 border-l-4 border-green-500' :
+                                                        notification.type === 'error' ? 'bg-red-50 border-l-4 border-red-500' :
+                                                            'bg-gray-50'
+                                        }`}
+                                    >
+                                        <h4 className={`text-sm font-medium ${
+                                            notification.type === 'info' ? 'text-blue-800' :
+                                                notification.type === 'warning' ? 'text-yellow-800' :
+                                                    notification.type === 'success' ? 'text-green-800' :
+                                                        notification.type === 'error' ? 'text-red-800' :
+                                                            'text-gray-800'
+                                        }`}>
+                                            {notification.title}
+                                        </h4>
+                                        <p className={`text-xs mt-1 ${
+                                            notification.type === 'info' ? 'text-blue-700' :
+                                                notification.type === 'warning' ? 'text-yellow-700' :
+                                                    notification.type === 'success' ? 'text-green-700' :
+                                                        notification.type === 'error' ? 'text-red-700' :
+                                                            'text-gray-600'
+                                        }`}>
+                                            {notification.message}
+                                        </p>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-sm text-gray-500 text-center py-4">
+                                    No tiene notificaciones nuevas
+                                </p>
+                            )}
                         </div>
                     </Card>
 

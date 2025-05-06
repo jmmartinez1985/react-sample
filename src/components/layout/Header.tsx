@@ -1,7 +1,9 @@
-import React from 'react';
+// src/components/layout/Header.tsx
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { HeaderProps } from '@/types';
 import Button from '@components/ui/Button';
+import ConfirmDialog from '@components/ui/ConfirmDialog';
 
 const Header: React.FC<HeaderProps> = ({
                                            isAuthenticated = false,
@@ -10,6 +12,22 @@ const Header: React.FC<HeaderProps> = ({
                                        }) => {
     // URL del logo de La Hipotecaria
     const logoUrl = 'https://www.lahipotecaria.com/panama/wp-content/themes/la-hipotecaria/assets/img/logo_la_hipotecaria.png';
+    const [showLogoutConfirm, setShowLogoutConfirm] = useState<boolean>(false);
+
+    const handleLogoutClick = () => {
+        setShowLogoutConfirm(true);
+    };
+
+    const confirmLogout = () => {
+        setShowLogoutConfirm(false);
+        if (onLogout) {
+            onLogout();
+        }
+    };
+
+    const cancelLogout = () => {
+        setShowLogoutConfirm(false);
+    };
 
     return (
         <header className="bg-white shadow-sm py-2">
@@ -30,13 +48,13 @@ const Header: React.FC<HeaderProps> = ({
                     <div className="flex items-center space-x-3">
                         {isAuthenticated ? (
                             <>
-                <span className="text-sm text-gray-700 mr-2">
-                  Hola, <span className="font-medium">{username}</span>
-                </span>
+                                <span className="text-sm text-gray-700 mr-2">
+                                    Hola, <span className="font-medium">{username}</span>
+                                </span>
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={onLogout}
+                                    onClick={handleLogoutClick}
                                     className="border border-gray-300 text-gray-700 hover:bg-gray-50"
                                 >
                                     Cerrar Sesión
@@ -66,6 +84,17 @@ const Header: React.FC<HeaderProps> = ({
                     </div>
                 </div>
             </div>
+
+            {/* Diálogo de confirmación para cerrar sesión */}
+            <ConfirmDialog
+                isOpen={showLogoutConfirm}
+                title="Confirmar cierre de sesión"
+                message="¿Estás seguro de que deseas cerrar sesión? Esta acción finalizará tu sesión activa."
+                confirmLabel="Sí, cerrar sesión"
+                cancelLabel="Cancelar"
+                onConfirm={confirmLogout}
+                onCancel={cancelLogout}
+            />
         </header>
     );
 };
