@@ -1,3 +1,4 @@
+// src/components/products/ProductCard.tsx
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Product, ProductType, ProductStatus } from '@/types/products';
@@ -10,7 +11,7 @@ interface ProductCardProps {
 const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     const navigate = useNavigate();
 
-    const getCardColorClass = (type: ProductType): string => {
+    const getCardColorClass = (type: string): string => {
         switch (type) {
             case ProductType.SAVINGS:
                 return 'border-green-500 bg-green-50';
@@ -25,7 +26,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         }
     };
 
-    const getProductTypeIcon = (type: ProductType): React.ReactNode => {
+    const getProductTypeIcon = (type: string): React.ReactNode => {
         switch (type) {
             case ProductType.SAVINGS:
                 return (
@@ -60,10 +61,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         }
     };
 
-    const getStatusBadge = (status?: ProductStatus): React.ReactNode => {
+    const getStatusBadge = (status?: string): React.ReactNode => {
         if (!status) return null;
 
-        const statusConfig = {
+        const statusConfig: Record<string, { color: string, text: string }> = {
             [ProductStatus.ACTIVE]: {
                 color: 'bg-green-100 text-green-800',
                 text: 'Activo'
@@ -82,7 +83,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             }
         };
 
-        const config = statusConfig[status];
+        // Add a fallback in case the status is not in our enum
+        const config = statusConfig[status] || {
+            color: 'bg-gray-100 text-gray-800',
+            text: status
+        };
+
         return (
             <span className={`px-2 py-1 text-xs rounded-full ${config.color}`}>
                 {config.text}
