@@ -1,6 +1,6 @@
 // src/pages/Dashboard.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import useAuth from '@hooks/useAuth';
 import Header from '@components/layout/Header';
@@ -220,6 +220,66 @@ interface Notification {
     read: boolean;
 }
 
+// Hook personalizado para reintentar operaciones después de un error
+const useAutoRetry = (
+    callback: () => Promise<void>,
+    dependencies: any[],
+    errorState: string | null,
+    retryDelay: number = 5000,
+    maxRetries: number = 3
+) => {
+    const retryCountRef = useRef<number>(0);
+    const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const isRetryingRef = useRef<boolean>(false);
+
+    // Limpiar el temporizador cuando se desmonte el componente
+    useEffect(() => {
+        return () => {
+            if (retryTimerRef.current) {
+                clearTimeout(retryTimerRef.current);
+                retryTimerRef.current = null;
+            }
+        };
+    }, []);
+
+    // Efecto para manejar reintentos cuando hay un error
+    useEffect(() => {
+        // Si hay un error y no estamos ya reintentando
+        if (errorState && !isRetryingRef.current && retryCountRef.current < maxRetries) {
+            console.log(`Error detectado. Reintentando en ${retryDelay / 1000} segundos (Intento ${retryCountRef.current + 1}/${maxRetries})...`);
+
+            isRetryingRef.current = true;
+
+            // Configurar temporizador para reintentar
+            retryTimerRef.current = setTimeout(() => {
+                retryCountRef.current += 1;
+                isRetryingRef.current = false;
+
+                // Ejecutar el callback para reintentar
+                callback().catch(() => {
+                    // Si falla nuevamente, el efecto se activará otra vez si aún tenemos errorState
+                });
+            }, retryDelay);
+        } else if (!errorState) {
+            // Reiniciar el contador de intentos cuando no hay error
+            retryCountRef.current = 0;
+            isRetryingRef.current = false;
+
+            // Limpiar cualquier temporizador pendiente
+            if (retryTimerRef.current) {
+                clearTimeout(retryTimerRef.current);
+                retryTimerRef.current = null;
+            }
+        }
+    }, [errorState, callback, retryDelay, maxRetries, ...dependencies]);
+
+    return {
+        isRetrying: isRetryingRef.current,
+        retryCount: retryCountRef.current,
+        maxRetries
+    };
+};
+
 const Dashboard: React.FC = () => {
     const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
     const [products, setProducts] = useState<Product[]>([]);
@@ -228,79 +288,90 @@ const Dashboard: React.FC = () => {
     const [lastUpdate, setLastUpdate] = useState<string | null>(null);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoadingNotifications, setIsLoadingNotifications] = useState<boolean>(false);
+    const [autoRetryEnabled, setAutoRetryEnabled] = useState<boolean>(true);
     const navigate = useNavigate();
 
-    useEffect(() => {
-        const fetchProducts = async () => {
-            try {
-                setIsLoading(true);
-                setError(null);
+    // Función para cargar productos del cliente
+    const fetchProducts = async () => {
+        try {
+            setIsLoading(true);
+            setError(null);
 
-                // Obtener el ID del cliente desde el usuario autenticado
-                const customerId = user?.attributes?.["custom:customerid"];
+            // Obtener el ID del cliente desde el usuario autenticado
+            const customerId = user?.attributes?.["custom:customerid"];
 
-                if (!customerId) {
-                    setError("No se encontró el ID de cliente. Por favor, contacte con soporte.");
-                    setIsLoading(false);
-                    return;
-                }
-
-                // Llamada real a la API usando el servicio
-                const response = await productService.getCustomerProducts(customerId);
-
-                if (response && response.data && response.data.products) {
-                    setProducts(response.data.products);
-                    setLastUpdate(new Date().toISOString());
-                } else {
-                    setProducts([]);
-                }
-
-            } catch (err: any) {
-                setError(err?.response?.data?.message || 'Error al cargar productos. Intente más tarde.');
-                console.error('Error fetching products:', err);
-            } finally {
+            if (!customerId) {
+                setError("No se encontró el ID de cliente. Por favor, contacte con soporte.");
                 setIsLoading(false);
+                return;
             }
-        };
 
-        const fetchNotifications = async () => {
-            try {
-                setIsLoadingNotifications(true);
+            // Llamada real a la API usando el servicio
+            const response = await productService.getCustomerProducts(customerId);
 
-                // Obtener notificaciones usando un servicio API
-                const userId = user?.attributes?.sub;
-                if (userId) {
-                    const response = await notificationService.getUserNotifications(userId);
-                    if (response && response.data && response.data.notifications) {
-                        setNotifications(response.data.notifications);
-                    }
+            if (response && response.data && response.data.products) {
+                setProducts(response.data.products);
+                setLastUpdate(new Date().toISOString());
+            } else {
+                setProducts([]);
+            }
+
+        } catch (err: any) {
+            setError(err?.response?.data?.message || 'Error al cargar productos. Intente más tarde.');
+            console.error('Error fetching products:', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Utilizamos el hook personalizado para reintentar la carga cuando hay errores
+    const { isRetrying, retryCount, maxRetries } = useAutoRetry(
+        fetchProducts,
+        [user],
+        autoRetryEnabled ? error : null,
+        5000, // 5 segundos
+        3     // máximo 3 intentos
+    );
+
+    const fetchNotifications = async () => {
+        try {
+            setIsLoadingNotifications(true);
+
+            // Obtener notificaciones usando un servicio API
+            const userId = user?.attributes?.sub;
+            if (userId) {
+                const response = await notificationService.getUserNotifications(userId);
+                if (response && response.data && response.data.notifications) {
+                    setNotifications(response.data.notifications);
                 }
-            } catch (error) {
-                console.error('Error al cargar notificaciones:', error);
-                // Usar notificaciones de ejemplo si la API falla
-                setNotifications([
-                    {
-                        id: '1',
-                        title: 'Bienvenido a su banca en línea',
-                        message: 'Hemos renovado nuestra plataforma para mejorar su experiencia.',
-                        type: 'info',
-                        date: new Date().toISOString(),
-                        read: false
-                    },
-                    {
-                        id: '2',
-                        title: 'Próximo pago de préstamo',
-                        message: 'Su próximo pago vence el 15/05/2025.',
-                        type: 'warning',
-                        date: new Date().toISOString(),
-                        read: false
-                    }
-                ]);
-            } finally {
-                setIsLoadingNotifications(false);
             }
-        };
+        } catch (error) {
+            console.error('Error al cargar notificaciones:', error);
+            // Usar notificaciones de ejemplo si la API falla
+            setNotifications([
+                {
+                    id: '1',
+                    title: 'Bienvenido a su banca en línea',
+                    message: 'Hemos renovado nuestra plataforma para mejorar su experiencia.',
+                    type: 'info',
+                    date: new Date().toISOString(),
+                    read: false
+                },
+                {
+                    id: '2',
+                    title: 'Próximo pago de préstamo',
+                    message: 'Su próximo pago vence el 15/05/2025.',
+                    type: 'warning',
+                    date: new Date().toISOString(),
+                    read: false
+                }
+            ]);
+        } finally {
+            setIsLoadingNotifications(false);
+        }
+    };
 
+    useEffect(() => {
         if (isAuthenticated && !authLoading) {
             fetchProducts();
             fetchNotifications();
@@ -315,6 +386,11 @@ const Dashboard: React.FC = () => {
     // Redirección al perfil de usuario
     const handleViewProfile = () => {
         navigate('/profile');
+    };
+
+    // Función para refrescar manualmente los datos
+    const handleRefresh = () => {
+        fetchProducts();
     };
 
     // Si no está autenticado, redirigir al login
@@ -350,12 +426,32 @@ const Dashboard: React.FC = () => {
                 <div className="mb-8">
                     <div className="flex flex-col sm:flex-row justify-between items-baseline mb-4">
                         <h2 className="text-xl font-bold text-gray-900">Mis Productos Financieros</h2>
-                        {lastUpdate && (
-                            <p className="text-sm text-gray-500">
-                                Actualizado: {new Date(lastUpdate).toLocaleString('es-PA')}
-                            </p>
-                        )}
+                        <div className="flex items-center space-x-4">
+                            {lastUpdate && (
+                                <p className="text-sm text-gray-500">
+                                    Actualizado: {new Date(lastUpdate).toLocaleString('es-PA')}
+                                </p>
+                            )}
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleRefresh}
+                                disabled={isLoading}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                Refrescar
+                            </Button>
+                        </div>
                     </div>
+
+                    {/* Mensaje de reintento automático */}
+                    {error && isRetrying && (
+                        <Alert variant="info" className="mb-4">
+                            Reintentando cargar productos automáticamente... Intento {retryCount}/{maxRetries}
+                        </Alert>
+                    )}
 
                     {/* Estado de carga */}
                     {isLoading ? (
@@ -366,6 +462,18 @@ const Dashboard: React.FC = () => {
                     ) : error ? (
                         <Alert variant="error" className="mb-4" onClose={() => setError(null)}>
                             {error}
+                            <div className="mt-2 flex space-x-3">
+                                <Button size="sm" variant="outline" onClick={handleRefresh}>
+                                    Intentar de nuevo
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setAutoRetryEnabled(!autoRetryEnabled)}
+                                >
+                                    {autoRetryEnabled ? 'Desactivar reintento automático' : 'Activar reintento automático'}
+                                </Button>
+                            </div>
                         </Alert>
                     ) : products.length === 0 ? (
                         <div className="bg-white rounded-lg p-8 shadow text-center">
