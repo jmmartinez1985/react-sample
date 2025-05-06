@@ -1,5 +1,3 @@
-// src/pages/ProductMovements.tsx
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import useAuth from '@hooks/useAuth';
@@ -75,6 +73,22 @@ const ProductMovements: React.FC = () => {
         setCurrentPage(page);
     };
 
+    // Función segura para formatear cantidades monetarias
+    const formatCurrency = (amount: number | undefined | null, currency: string = 'USD') => {
+        if (amount === undefined || amount === null) {
+            return 'N/A';
+        }
+        try {
+            return amount.toLocaleString('es-PA', {
+                style: 'currency',
+                currency: currency
+            });
+        } catch (error) {
+            console.error('Error al formatear moneda:', error);
+            return `${amount} ${currency}`;
+        }
+    };
+
     // Función para renderizar la tabla de movimientos según el tipo de producto
     const renderMovementsTable = () => {
         if (movements.length === 0) {
@@ -101,28 +115,23 @@ const ProductMovements: React.FC = () => {
                         {movements.map((movement: Transaction) => (
                             <tr key={movement.transactionId} className="border-b border-gray-200 hover:bg-gray-50">
                                 <td className="py-3 px-4">
-                                    {new Date(movement.transactionDate).toLocaleDateString('es-PA')}
+                                    {movement.transactionDate ? new Date(movement.transactionDate).toLocaleDateString('es-PA') : 'N/A'}
                                 </td>
-                                <td className="py-3 px-4">{movement.description}</td>
+                                <td className="py-3 px-4">{movement.description || 'N/A'}</td>
                                 <td className={`py-3 px-4 text-right ${
                                     movement.transactionType === 'DEPOSIT' ||
                                     movement.transactionType === 'TRANSFER_IN' ||
                                     movement.transactionType === 'INTEREST' ? 'text-green-600' : 'text-red-600'
                                 }`}>
-                                    {(movement.transactionType === 'DEPOSIT' ||
+                                    {movement.amount !== undefined && (
+                                        (movement.transactionType === 'DEPOSIT' ||
                                         movement.transactionType === 'TRANSFER_IN' ||
                                         movement.transactionType === 'INTEREST' ? '+' : '-') +
-                                        movement.amount.toLocaleString('es-PA', {
-                                            style: 'currency',
-                                            currency: movement.currency
-                                        })
-                                    }
+                                        formatCurrency(movement.amount, movement.currency)
+                                    )}
                                 </td>
                                 <td className="py-3 px-4 text-right font-medium">
-                                    {movement.balance.toLocaleString('es-PA', {
-                                        style: 'currency',
-                                        currency: movement.currency
-                                    })}
+                                    {formatCurrency(movement.balance, movement.currency)}
                                 </td>
                             </tr>
                         ))}
@@ -148,7 +157,7 @@ const ProductMovements: React.FC = () => {
                         {movements.map((payment: LoanPayment) => (
                             <tr key={payment.paymentId} className="border-b border-gray-200 hover:bg-gray-50">
                                 <td className="py-3 px-4">
-                                    {new Date(payment.paymentDate).toLocaleDateString('es-PA')}
+                                    {payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString('es-PA') : 'N/A'}
                                 </td>
                                 <td className="py-3 px-4">
                                     {payment.paymentMethod === 'BANK_TRANSFER' ? 'Transferencia' :
@@ -158,33 +167,24 @@ const ProductMovements: React.FC = () => {
                                                     payment.paymentMethod === 'CHECK' ? 'Cheque' : 'Otro'}
                                 </td>
                                 <td className="py-3 px-4 text-right">
-                                    {payment.principalAmount?.toLocaleString('es-PA', {
-                                        style: 'currency',
-                                        currency: payment.currency
-                                    }) || 'N/A'}
+                                    {formatCurrency(payment.principalAmount, payment.currency)}
                                 </td>
                                 <td className="py-3 px-4 text-right">
-                                    {payment.interestAmount?.toLocaleString('es-PA', {
-                                        style: 'currency',
-                                        currency: payment.currency
-                                    }) || 'N/A'}
+                                    {formatCurrency(payment.interestAmount, payment.currency)}
                                 </td>
                                 <td className="py-3 px-4 text-right font-medium text-green-600">
-                                    {payment.amount.toLocaleString('es-PA', {
-                                        style: 'currency',
-                                        currency: payment.currency
-                                    })}
+                                    {formatCurrency(payment.amount, payment.currency)}
                                 </td>
                                 <td className="py-3 px-4 text-center">
-                    <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
-                        payment.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
-                            payment.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                                payment.status === 'FAILED' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {payment.status === 'COMPLETED' ? 'Completado' :
-                          payment.status === 'PENDING' ? 'Pendiente' :
-                              payment.status === 'FAILED' ? 'Fallido' : 'Reversado'}
-                    </span>
+                                    <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
+                                        payment.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                                            payment.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                                                payment.status === 'FAILED' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {payment.status === 'COMPLETED' ? 'Completado' :
+                                          payment.status === 'PENDING' ? 'Pendiente' :
+                                              payment.status === 'FAILED' ? 'Fallido' : 'Reversado'}
+                                    </span>
                                 </td>
                             </tr>
                         ))}
@@ -226,8 +226,8 @@ const ProductMovements: React.FC = () => {
                         <p className="text-sm text-gray-700">
                             Mostrando <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> a{' '}
                             <span className="font-medium">
-                {Math.min(currentPage * pageSize, pagination.totalRecords)}
-              </span>{' '}
+                                {Math.min(currentPage * pageSize, pagination.totalRecords)}
+                            </span>{' '}
                             de <span className="font-medium">{pagination.totalRecords}</span> resultados
                         </p>
                     </div>
@@ -246,7 +246,7 @@ const ProductMovements: React.FC = () => {
                                 </svg>
                             </Button>
 
-                            {[...Array(pagination.totalPages)].map((_, i) => (
+                            {Array.from({ length: pagination.totalPages }, (_, i) => (
                                 <Button
                                     key={i}
                                     variant={currentPage === i + 1 ? 'primary' : 'outline'}
