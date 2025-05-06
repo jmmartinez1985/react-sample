@@ -6,6 +6,7 @@ import { z } from 'zod';
 import Button from '@components/ui/Button';
 import Input from '@components/ui/Input';
 import Alert from '@components/ui/Alert';
+import ConfirmDialog from '@components/ui/ConfirmDialog';
 import userService from '@services/userService';
 
 // Esquema de validación
@@ -33,6 +34,8 @@ interface ChangePasswordFormProps {
 const ChangePasswordForm: React.FC<ChangePasswordFormProps> = ({ onSuccess, onCancel }) => {
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+    const [showConfirm, setShowConfirm] = useState<boolean>(false);
+    const [formData, setFormData] = useState<ChangePasswordFormValues | null>(null);
 
     const {
         register,
@@ -42,15 +45,24 @@ const ChangePasswordForm: React.FC<ChangePasswordFormProps> = ({ onSuccess, onCa
         resolver: zodResolver(changePasswordSchema)
     });
 
-    const onSubmit = async (data: ChangePasswordFormValues) => {
+    const onSubmitForm = (data: ChangePasswordFormValues) => {
+        // Guardar los datos del formulario y mostrar el diálogo de confirmación
+        setFormData(data);
+        setShowConfirm(true);
+    };
+
+    const handleConfirmChangePassword = async () => {
+        if (!formData) return;
+
         try {
             setIsSubmitting(true);
             setError(null);
+            setShowConfirm(false);
 
             // Preparar los datos para la API
             const changePasswordData = {
-                oldPassword: data.oldPassword,
-                newPassword: data.newPassword
+                oldPassword: formData.oldPassword,
+                newPassword: formData.newPassword
             };
 
             // Llamar al servicio de cambio de contraseña
@@ -65,63 +77,80 @@ const ChangePasswordForm: React.FC<ChangePasswordFormProps> = ({ onSuccess, onCa
         }
     };
 
+    const handleCancelConfirm = () => {
+        setShowConfirm(false);
+    };
+
     return (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            {error && (
-                <Alert
-                    variant="error"
-                    title="Error al cambiar la contraseña"
-                    onClose={() => setError(null)}
-                >
-                    {error}
-                </Alert>
-            )}
-
-            <Input
-                label="Contraseña actual"
-                id="oldPassword"
-                type="password"
-                placeholder="••••••••"
-                error={errors.oldPassword?.message}
-                register={register('oldPassword')}
-                required
+        <>
+            <ConfirmDialog
+                isOpen={showConfirm}
+                title="Confirmar cambio de contraseña"
+                message="¿Estás seguro de que deseas cambiar tu contraseña? Esta acción no se puede deshacer."
+                confirmLabel="Sí, cambiar contraseña"
+                cancelLabel="Cancelar"
+                onConfirm={handleConfirmChangePassword}
+                onCancel={handleCancelConfirm}
             />
 
-            <Input
-                label="Nueva contraseña"
-                id="newPassword"
-                type="password"
-                placeholder="••••••••"
-                error={errors.newPassword?.message}
-                register={register('newPassword')}
-                required
-            />
+            <form onSubmit={handleSubmit(onSubmitForm)} className="space-y-4">
+                {error && (
+                    <Alert
+                        variant="error"
+                        title="Error al cambiar la contraseña"
+                        onClose={() => setError(null)}
+                    >
+                        {error}
+                    </Alert>
+                )}
 
-            <Input
-                label="Confirmar nueva contraseña"
-                id="confirmPassword"
-                type="password"
-                placeholder="••••••••"
-                error={errors.confirmPassword?.message}
-                register={register('confirmPassword')}
-                required
-            />
+                <Input
+                    label="Contraseña actual"
+                    id="oldPassword"
+                    type="password"
+                    placeholder="••••••••"
+                    error={errors.oldPassword?.message}
+                    register={register('oldPassword')}
+                    required
+                />
 
-            <div className="pt-2 flex justify-end space-x-3">
-                <Button
-                    variant="outline"
-                    onClick={onCancel}
-                >
-                    Cancelar
-                </Button>
-                <Button
-                    type="submit"
-                    isLoading={isSubmitting}
-                >
-                    Cambiar contraseña
-                </Button>
-            </div>
-        </form>
+                <Input
+                    label="Nueva contraseña"
+                    id="newPassword"
+                    type="password"
+                    placeholder="••••••••"
+                    error={errors.newPassword?.message}
+                    register={register('newPassword')}
+                    required
+                />
+
+                <Input
+                    label="Confirmar nueva contraseña"
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="••••••••"
+                    error={errors.confirmPassword?.message}
+                    register={register('confirmPassword')}
+                    required
+                />
+
+                <div className="pt-2 flex justify-end space-x-3">
+                    <Button
+                        variant="outline"
+                        onClick={onCancel}
+                        type="button"
+                    >
+                        Cancelar
+                    </Button>
+                    <Button
+                        type="submit"
+                        isLoading={isSubmitting}
+                    >
+                        Cambiar contraseña
+                    </Button>
+                </div>
+            </form>
+        </>
     );
 };
 
