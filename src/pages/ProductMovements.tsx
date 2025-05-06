@@ -173,7 +173,7 @@ const ProductMovements: React.FC = () => {
                                     {formatCurrency(payment.interestAmount, payment.currency)}
                                 </td>
                                 <td className="py-3 px-4 text-right font-medium text-green-600">
-                                    {formatCurrency(payment.amount, payment.currency)}
+                                    {formatCurrency(payment.paymentAmount, payment.currency)}
                                 </td>
                                 <td className="py-3 px-4 text-center">
                                     <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
