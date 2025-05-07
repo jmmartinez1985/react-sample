@@ -1,5 +1,4 @@
 // src/pages/ProductDetail.tsx
-// Versión optimizada eliminando objetos no utilizados
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useLocation, useNavigate, Navigate } from 'react-router-dom';
@@ -11,8 +10,10 @@ import Button from '@components/ui/Button';
 import Spinner from '@components/ui/Spinner';
 import Alert from '@components/ui/Alert';
 import TransferModal from '@components/modals/TransferModal';
+import LoanPaymentModal from '@components/modals/LoanPaymentModal';
 import productService from '@services/productService';
 import { TransferResponse } from '@services/transferService';
+import { LoanPaymentResponse } from '@services/loanPaymentService';
 import { BalanceData, FixedTermAccountData, LoanBalanceData, Product } from '@/types/products';
 
 // Interfaz de parámetros para useParams
@@ -43,6 +44,11 @@ const ProductDetail: React.FC = () => {
     // Estados para la funcionalidad de transferencia
     const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
     const [isLoadingTransferModal, setIsLoadingTransferModal] = useState<boolean>(false);
+
+    // Estados para la funcionalidad de pago de préstamos
+    const [isLoanPaymentModalOpen, setIsLoanPaymentModalOpen] = useState<boolean>(false);
+    const [isLoadingLoanPaymentModal, setIsLoadingLoanPaymentModal] = useState<boolean>(false);
+
     const [products, setProducts] = useState<Product[]>([]);
 
     // Obtener el tipo de producto del estado
@@ -91,8 +97,41 @@ const ProductDetail: React.FC = () => {
     };
 
     const handleTransferSuccess = (response: TransferResponse): void => {
-
         // Recargar los detalles del producto después de una transferencia exitosa
+        console.log(response);
+        setTimeout(() => {
+            if (productId && productType) {
+                void fetchProductDetail();
+            }
+        }, 1000);
+    };
+
+    // Funciones para manejar la apertura/cierre del modal de pagos de préstamos
+    const handleOpenLoanPaymentModal = async (): Promise<void> => {
+        setIsLoadingLoanPaymentModal(true);
+
+        try {
+            // Si aún no tenemos productos, los cargamos
+            if (products.length === 0) {
+                await fetchProducts();
+            }
+
+            // Ahora que los productos están cargados, abrimos el modal
+            setIsLoanPaymentModalOpen(true);
+        } catch (err) {
+            console.error('Error al preparar el modal de pago:', err);
+            setError('No se pudieron cargar las cuentas para pago. Inténtelo de nuevo.');
+        } finally {
+            setIsLoadingLoanPaymentModal(false);
+        }
+    };
+
+    const handleCloseLoanPaymentModal = (): void => {
+        setIsLoanPaymentModalOpen(false);
+    };
+
+    const handleLoanPaymentSuccess = (response: LoanPaymentResponse): void => {
+        // Recargar los detalles del producto después de un pago exitoso
         console.log(response);
         setTimeout(() => {
             if (productId && productType) {
@@ -530,8 +569,18 @@ const ProductDetail: React.FC = () => {
                                 )}
 
                                 {productType === 'CREDIT' && (
-                                    <Button variant="outline" className="w-full">
-                                        Realizar Pago
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={handleOpenLoanPaymentModal}
+                                        disabled={isLoadingLoanPaymentModal}
+                                    >
+                                        {isLoadingLoanPaymentModal ? (
+                                            <>
+                                                <Spinner size="sm" className="mr-2" />
+                                                Cargando cuentas...
+                                            </>
+                                        ) : 'Realizar Pago'}
                                     </Button>
                                 )}
 
@@ -552,6 +601,17 @@ const ProductDetail: React.FC = () => {
                     sourceAccountId={productId}
                     products={products}
                     onSuccess={handleTransferSuccess}
+                />
+            )}
+
+            {/* Modal de Pagos de Préstamos - Solo renderizar cuando tenemos productos */}
+            {products.length > 0 && (
+                <LoanPaymentModal
+                    isOpen={isLoanPaymentModalOpen}
+                    onClose={handleCloseLoanPaymentModal}
+                    loanId={productId}
+                    products={products}
+                    onSuccess={handleLoanPaymentSuccess}
                 />
             )}
 

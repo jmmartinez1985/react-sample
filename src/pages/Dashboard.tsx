@@ -10,9 +10,11 @@ import Card from '@components/ui/Card';
 import Spinner from '@components/ui/Spinner';
 import Alert from '@components/ui/Alert';
 import TransferModal from '@components/modals/TransferModal';
+import LoanPaymentModal from '@components/modals/LoanPaymentModal';
 import productService from '@services/productService';
 import notificationService from '@services/notificationService';
 import { TransferResponse } from '@services/transferService';
+import { LoanPaymentResponse } from '@services/loanPaymentService';
 import { Product, ProductType } from '@/types/products';
 import { User } from '@/types';
 
@@ -51,10 +53,11 @@ interface ProductCardProps {
     product: Product;
     onViewDetails: (productId: string, productType: string) => void;
     onTransfer: (accountId: string) => void;
+    onPayLoan: (loanId: string) => void;
 }
 
 // Componente para mostrar un producto financiero en forma de tarjeta
-const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTransfer }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTransfer, onPayLoan }) => {
     // Función para determinar el color del borde según el tipo de producto
     const getBorderColor = () => {
         switch (product.productType) {
@@ -202,7 +205,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTra
 
                     {/* Botón primario según el tipo de producto */}
                     {product.productType === ProductType.CREDIT && (
-                        <Button size="sm">Pagar</Button>
+                        <Button
+                            size="sm"
+                            onClick={() => onPayLoan(product.accountNumber)}
+                        >
+                            Pagar
+                        </Button>
                     )}
                     {(product.productType === ProductType.SAVINGS || product.productType === ProductType.DEPOSIT) && (
                         <Button
@@ -297,8 +305,13 @@ const Dashboard: React.FC = () => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoadingNotifications, setIsLoadingNotifications] = useState<boolean>(false);
     const [autoRetryEnabled, setAutoRetryEnabled] = useState<boolean>(true);
+
+    // Estados para los modales
     const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
+    const [isLoanPaymentModalOpen, setIsLoanPaymentModalOpen] = useState<boolean>(false);
     const [selectedSourceAccount, setSelectedSourceAccount] = useState<string | undefined>(undefined);
+    const [selectedLoanId, setSelectedLoanId] = useState<string | undefined>(undefined);
+
     const navigate = useNavigate();
 
     // Función para cargar productos del cliente
@@ -422,6 +435,27 @@ const Dashboard: React.FC = () => {
         }, 1000);
     };
 
+    // Funciones para manejar el modal de pagos de préstamos
+    const handleOpenLoanPaymentModal = (loanId?: string, sourceAccountId?: string) => {
+        setSelectedLoanId(loanId);
+        setSelectedSourceAccount(sourceAccountId);
+        setIsLoanPaymentModalOpen(true);
+    };
+
+    const handleCloseLoanPaymentModal = () => {
+        setIsLoanPaymentModalOpen(false);
+        setSelectedLoanId(undefined);
+        setSelectedSourceAccount(undefined);
+    };
+
+    const handleLoanPaymentSuccess = (response: LoanPaymentResponse) => {
+        // Actualizar la lista de productos después de un pago exitoso
+        console.log(response);
+        setTimeout(() => {
+            fetchProducts();
+        }, 1000);
+    };
+
     // Si no está autenticado, redirigir al login
     if (!isAuthenticated && !authLoading) {
         return <Navigate to="/login" replace />;
@@ -517,6 +551,7 @@ const Dashboard: React.FC = () => {
                                     product={product}
                                     onViewDetails={handleViewDetails}
                                     onTransfer={handleOpenTransferModal}
+                                    onPayLoan={handleOpenLoanPaymentModal}
                                 />
                             ))}
                         </div>
@@ -538,7 +573,10 @@ const Dashboard: React.FC = () => {
                                 </svg>
                                 <span className="text-gray-700">Realizar transferencia</span>
                             </button>
-                            <button className="w-full flex items-center p-3 rounded-md hover:bg-gray-50 transition-colors">
+                            <button
+                                className="w-full flex items-center p-3 rounded-md hover:bg-gray-50 transition-colors"
+                                onClick={() => handleOpenLoanPaymentModal()}
+                            >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                 </svg>
@@ -651,6 +689,16 @@ const Dashboard: React.FC = () => {
                 sourceAccountId={selectedSourceAccount}
                 products={products}
                 onSuccess={handleTransferSuccess}
+            />
+
+            {/* Modal de Pago de Préstamos */}
+            <LoanPaymentModal
+                isOpen={isLoanPaymentModalOpen}
+                onClose={handleCloseLoanPaymentModal}
+                loanId={selectedLoanId}
+                sourceAccountId={selectedSourceAccount}
+                products={products}
+                onSuccess={handleLoanPaymentSuccess}
             />
 
             <Footer />
