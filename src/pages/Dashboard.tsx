@@ -9,8 +9,10 @@ import Button from '@components/ui/Button';
 import Card from '@components/ui/Card';
 import Spinner from '@components/ui/Spinner';
 import Alert from '@components/ui/Alert';
+import TransferModal from '@components/modals/TransferModal';
 import productService from '@services/productService';
 import notificationService from '@services/notificationService';
+import { TransferResponse } from '@services/transferService';
 import { Product, ProductType } from '@/types/products';
 import { User } from '@/types';
 
@@ -48,10 +50,11 @@ const ProfileSummary: React.FC<ProfileSummaryProps> = ({ user, onViewProfile }) 
 interface ProductCardProps {
     product: Product;
     onViewDetails: (productId: string, productType: string) => void;
+    onTransfer: (accountId: string) => void;
 }
 
 // Componente para mostrar un producto financiero en forma de tarjeta
-const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTransfer }) => {
     // Función para determinar el color del borde según el tipo de producto
     const getBorderColor = () => {
         switch (product.productType) {
@@ -202,7 +205,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails }) => 
                         <Button size="sm">Pagar</Button>
                     )}
                     {(product.productType === ProductType.SAVINGS || product.productType === ProductType.DEPOSIT) && (
-                        <Button size="sm">Transferir</Button>
+                        <Button
+                            size="sm"
+                            onClick={() => onTransfer(product.accountNumber)}
+                        >
+                            Transferir
+                        </Button>
                     )}
                 </div>
             </div>
@@ -289,6 +297,8 @@ const Dashboard: React.FC = () => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoadingNotifications, setIsLoadingNotifications] = useState<boolean>(false);
     const [autoRetryEnabled, setAutoRetryEnabled] = useState<boolean>(true);
+    const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
+    const [selectedSourceAccount, setSelectedSourceAccount] = useState<string | undefined>(undefined);
     const navigate = useNavigate();
 
     // Función para cargar productos del cliente
@@ -393,6 +403,25 @@ const Dashboard: React.FC = () => {
         fetchProducts();
     };
 
+    // Funciones para manejar el modal de transferencias
+    const handleOpenTransferModal = (sourceAccountId?: string) => {
+        setSelectedSourceAccount(sourceAccountId);
+        setIsTransferModalOpen(true);
+    };
+
+    const handleCloseTransferModal = () => {
+        setIsTransferModalOpen(false);
+        setSelectedSourceAccount(undefined);
+    };
+
+    const handleTransferSuccess = (response: TransferResponse) => {
+        // Actualizar la lista de productos después de una transferencia exitosa
+        console.log(response);
+        setTimeout(() => {
+            fetchProducts();
+        }, 1000);
+    };
+
     // Si no está autenticado, redirigir al login
     if (!isAuthenticated && !authLoading) {
         return <Navigate to="/login" replace />;
@@ -487,6 +516,7 @@ const Dashboard: React.FC = () => {
                                     key={product.productId}
                                     product={product}
                                     onViewDetails={handleViewDetails}
+                                    onTransfer={handleOpenTransferModal}
                                 />
                             ))}
                         </div>
@@ -499,7 +529,10 @@ const Dashboard: React.FC = () => {
                     <Card className="p-6">
                         <h3 className="text-md font-medium text-gray-900 mb-4">Acciones Rápidas</h3>
                         <div className="space-y-3">
-                            <button className="w-full flex items-center p-3 rounded-md hover:bg-gray-50 transition-colors">
+                            <button
+                                className="w-full flex items-center p-3 rounded-md hover:bg-gray-50 transition-colors"
+                                onClick={() => handleOpenTransferModal()}
+                            >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                                 </svg>
@@ -610,6 +643,15 @@ const Dashboard: React.FC = () => {
                     </Card>
                 </div>
             </main>
+
+            {/* Modal de Transferencias */}
+            <TransferModal
+                isOpen={isTransferModalOpen}
+                onClose={handleCloseTransferModal}
+                sourceAccountId={selectedSourceAccount}
+                products={products}
+                onSuccess={handleTransferSuccess}
+            />
 
             <Footer />
         </div>
