@@ -780,7 +780,7 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
                             required
                         />
                         <Button
-                            variant="secondary"
+                            variant="primary"
                             onClick={handleSaveFavorite}
                             disabled={isSavingFavorite || !favoriteName.trim()}
                         >
