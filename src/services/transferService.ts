@@ -8,6 +8,8 @@ import { Product, ProductType } from '@/types/products';
 // @ts-ignore
 const ACCOUNT_API_URL: string = import.meta.env.ACCOUNT_API_URL || 'https://3v69altpe9.execute-api.us-east-1.amazonaws.com/dev/v1';
 
+export type TransferType = 'OWN' | 'THIRD_PARTY';
+
 export interface TransferRequest {
     sourceAccountId: string;
     destinationAccountId: string;
@@ -15,6 +17,10 @@ export interface TransferRequest {
     currency: string;
     reference?: string;
     description?: string;
+    destinationName?: string;
+    mail?: string;
+    transferType: TransferType; // Nuevo campo
+    destinationBank?: string;  // Nuevo campo para cuando es transferencia a terceros
     metadata?: Record<string, any>;
 }
 

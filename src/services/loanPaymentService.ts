@@ -14,15 +14,21 @@ export enum PaymentType {
     SETTLEMENT = 'SETTLEMENT'
 }
 
+export type PaymentDestinationType = 'OWN' | 'THIRD_PARTY';
+
 export interface LoanPaymentRequest {
+    transactionId: string;
     sourceAccountId: string;
     loanId: string;
-    transactionId: string;
     amount: number;
     currency: string;
-    paymentType?: PaymentType;
+    paymentType: PaymentType;
     reference?: string;
     description?: string;
+    destinationName?: string;
+    mail?: string;
+    destinationType: PaymentDestinationType; // Nuevo campo
+    destinationBank?: string;  // Nuevo campo para cuando es pago a terceros
     metadata?: Record<string, any>;
 }
 

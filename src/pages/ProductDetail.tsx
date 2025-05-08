@@ -40,6 +40,7 @@ const ProductDetail: React.FC = () => {
     const [productDetail, setProductDetail] = useState<ProductDetailData | null>(null);
     const [isLoadingDetail, setIsLoadingDetail] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [customerId, setCustomerId] = useState<string | undefined>(undefined);
 
     // Estados para la funcionalidad de transferencia
     const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
@@ -59,12 +60,17 @@ const ProductDetail: React.FC = () => {
         if (!user) return;
 
         try {
-            const customerId = user.attributes?.["custom:customerid"];
-            if (customerId) {
-                const response = await productService.getCustomerProducts(customerId);
+            const customerIdFromUser = user.attributes?.["custom:customerid"];
+            if (customerIdFromUser) {
+                // Guardar el customerId en el estado
+                setCustomerId(customerIdFromUser);
+
+                const response = await productService.getCustomerProducts(customerIdFromUser);
                 if (response && response.data && Array.isArray(response.data.products)) {
                     setProducts(response.data.products);
                 }
+            } else {
+                setError('No se encontró el ID de cliente. Por favor, contacte con soporte.');
             }
         } catch (error) {
             console.error('Error al cargar productos:', error);
@@ -74,6 +80,12 @@ const ProductDetail: React.FC = () => {
 
     // Funciones para manejar la apertura/cierre del modal de transferencias
     const handleOpenTransferModal = async (): Promise<void> => {
+        // Validar que tenemos un customerId
+        if (!customerId) {
+            setError('No se encontró el ID de cliente. Por favor, actualice la página o contacte con soporte.');
+            return;
+        }
+
         setIsLoadingTransferModal(true);
 
         try {
@@ -108,6 +120,12 @@ const ProductDetail: React.FC = () => {
 
     // Funciones para manejar la apertura/cierre del modal de pagos de préstamos
     const handleOpenLoanPaymentModal = async (): Promise<void> => {
+        // Validar que tenemos un customerId
+        if (!customerId) {
+            setError('No se encontró el ID de cliente. Por favor, actualice la página o contacte con soporte.');
+            return;
+        }
+
         setIsLoadingLoanPaymentModal(true);
 
         try {
@@ -593,25 +611,27 @@ const ProductDetail: React.FC = () => {
                 </div>
             </main>
 
-            {/* Modal de Transferencias - Solo renderizar cuando tenemos productos */}
-            {products.length > 0 && (
+            {/* Modal de Transferencias - Solo renderizar cuando tenemos productos y customerId */}
+            {products.length > 0 && customerId && (
                 <TransferModal
                     isOpen={isTransferModalOpen}
                     onClose={handleCloseTransferModal}
                     sourceAccountId={productId}
                     products={products}
                     onSuccess={handleTransferSuccess}
+                    customerId={customerId}
                 />
             )}
 
-            {/* Modal de Pagos de Préstamos - Solo renderizar cuando tenemos productos */}
-            {products.length > 0 && (
+            {/* Modal de Pagos de Préstamos - Solo renderizar cuando tenemos productos y customerId */}
+            {products.length > 0 && customerId && (
                 <LoanPaymentModal
                     isOpen={isLoanPaymentModalOpen}
                     onClose={handleCloseLoanPaymentModal}
                     loanId={productId}
                     products={products}
                     onSuccess={handleLoanPaymentSuccess}
+                    customerId={customerId}
                 />
             )}
 

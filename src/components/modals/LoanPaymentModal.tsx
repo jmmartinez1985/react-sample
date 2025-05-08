@@ -9,10 +9,19 @@ import Alert from '@components/ui/Alert';
 import Spinner from '@components/ui/Spinner';
 import useAuth from '@hooks/useAuth';
 import loanPaymentService, { LoanPaymentRequest, LoanPaymentResponse, PaymentType } from '@services/loanPaymentService';
+import correspondentBankService from '@services/correspondentBankService';
+import favoritesService, { FavoriteType } from '@services/favoritesService';
 import { Product, ProductType } from '@/types/products';
 
 // Definición de tipos
 type ModalStep = 'form' | 'confirmation' | 'result';
+type PaymentDestinationType = 'OWN' | 'THIRD_PARTY'; // Tipo para el destino del pago
+
+// Valor constante para los tipos de destino de pago (para evitar errores de comparación)
+const PAYMENT_DESTINATION = {
+    OWN: 'OWN' as PaymentDestinationType,
+    THIRD_PARTY: 'THIRD_PARTY' as PaymentDestinationType
+};
 
 interface LoanPaymentFormData {
     sourceAccountId: string;
@@ -22,6 +31,30 @@ interface LoanPaymentFormData {
     paymentType: PaymentType;
     reference: string;
     description: string;
+    destinationType: PaymentDestinationType; // Campo para tipo de destino
+    bankId?: string; // Campo para banco destino cuando es pago a terceros
+    destinationName: string; // NUEVO: Nombre del destinatario
+    mail: string; // NUEVO: Correo electrónico del destinatario
+}
+
+interface Favorite {
+    favoriteId: string;
+    favoriteType: string;
+    name: string;
+    description?: string;
+    destinationAccount?: string;
+    destinationBank?: string;
+    destinationName?: string;
+    loanNumber?: string;
+    mail?: string; // NUEVO: Añadido el campo mail
+}
+
+interface Bank {
+    bankId: string;
+    name: string;
+    code: string;
+    country: string;
+    status: string;
 }
 
 interface LoanPaymentModalProps {
@@ -31,6 +64,7 @@ interface LoanPaymentModalProps {
     sourceAccountId?: string;
     products: Product[];
     onSuccess?: (response: LoanPaymentResponse) => void;
+    customerId?: string; // ID del cliente para consultar/guardar favoritos (opcional)
 }
 
 const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
@@ -39,7 +73,8 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
                                                                loanId,
                                                                sourceAccountId,
                                                                products,
-                                                               onSuccess
+                                                               onSuccess,
+                                                               customerId
                                                            }) => {
     useAuth();
 
@@ -51,8 +86,25 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
         currency: 'USD',
         paymentType: PaymentType.REGULAR,
         reference: '',
-        description: ''
+        description: '',
+        destinationType: PAYMENT_DESTINATION.OWN, // Por defecto, pago a préstamo propio
+        bankId: '',
+        destinationName: '', // NUEVO: Inicializar campo nombre destinatario
+        mail: '' // NUEVO: Inicializar campo mail
     });
+
+    // NUEVO: Estado para validación de correo
+    const [emailError, setEmailError] = useState<string | null>(null);
+
+    // Estados para bancos y favoritos
+    const [banks, setBanks] = useState<Bank[]>([]);
+    const [favorites, setFavorites] = useState<Favorite[]>([]);
+    const [selectedFavorite, setSelectedFavorite] = useState<string>('');
+    const [isLoadingBanks, setIsLoadingBanks] = useState<boolean>(false);
+    const [isLoadingFavorites, setIsLoadingFavorites] = useState<boolean>(false);
+    const [isSavingFavorite, setIsSavingFavorite] = useState<boolean>(false);
+    const [saveFavorite, setSaveFavorite] = useState<boolean>(false);
+    const [favoriteName, setFavoriteName] = useState<string>('');
 
     // Estados para manejo del modal
     const [step, setStep] = useState<ModalStep>('form');
@@ -70,31 +122,144 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
         product.productType === ProductType.CREDIT
     );
 
-    // Reiniciar el formulario cuando se abre el modal
+    // NUEVO: Función para validar el formato de correo electrónico
+    const validateEmail = (email: string): boolean => {
+        const re = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+        return re.test(String(email).toLowerCase());
+    };
+
+    // Cargar bancos y favoritos al abrir el modal
     useEffect(() => {
         if (isOpen) {
             setStep('form');
             setError(null);
+            setEmailError(null); // Reiniciar error de email
             setPaymentResult(null);
+
+            // Inicializar el formulario según tipo de destino
+            const initialDestType = PAYMENT_DESTINATION.OWN; // Siempre empezamos con préstamo propio por defecto
+
             setFormData({
                 sourceAccountId: sourceAccountId || '',
-                loanId: loanId || '',
+                // Solo establecer loanId si es préstamo propio y se proporciona un ID
+                loanId: initialDestType === PAYMENT_DESTINATION.OWN ? (loanId || '') : '',
                 amount: '',
                 currency: 'USD',
                 paymentType: PaymentType.REGULAR,
                 reference: '',
-                description: ''
+                description: '',
+                destinationType: initialDestType,
+                bankId: '',
+                destinationName: '', // Reiniciar
+                mail: '' // Reiniciar
             });
+
+            setSelectedFavorite('');
+            setSaveFavorite(false);
+            setFavoriteName('');
+
+            // Solo cargar bancos y favoritos si es necesario
+            if (initialDestType === PAYMENT_DESTINATION.THIRD_PARTY) {
+                fetchBanks();
+                if (customerId) {
+                    fetchFavorites();
+                }
+            }
         }
-    }, [isOpen, sourceAccountId, loanId]);
+    }, [isOpen, sourceAccountId, loanId, customerId]);
+
+    // Efecto para cargar bancos y favoritos cuando cambia el tipo de destino
+    useEffect(() => {
+        if (formData.destinationType === 'THIRD_PARTY') {
+            fetchBanks();
+            if (customerId) {
+                fetchFavorites();
+            }
+        }
+    }, [formData.destinationType, customerId]);
+
+    // Cargar lista de bancos
+    const fetchBanks = async () => {
+        try {
+            setIsLoadingBanks(true);
+            const response = await correspondentBankService.getAllBanks();
+            setBanks(response.data.banks.filter(bank => bank.status === 'ACTIVE'));
+        } catch (err) {
+            console.error('Error al cargar bancos:', err);
+            setError('No se pudieron cargar los bancos corresponsales');
+        } finally {
+            setIsLoadingBanks(false);
+        }
+    };
+
+    // Cargar lista de favoritos
+    const fetchFavorites = async () => {
+        if (!customerId) {
+            console.log('No se pueden cargar favoritos: ID de cliente no disponible');
+            setFavorites([]);
+            return;
+        }
+
+        try {
+            setIsLoadingFavorites(true);
+            const response = await favoritesService.getFavoritesByCustomer(customerId);
+            // Filtrar solo favoritos de tipo LOAN_PAYMENT
+            const loanPaymentFavorites = response.data.favorites.filter(
+                favorite => favorite.favoriteType === 'LOAN_PAYMENT'
+            );
+            setFavorites(loanPaymentFavorites);
+        } catch (err) {
+            console.error('Error al cargar favoritos:', err);
+            setError('No se pudieron cargar los favoritos');
+        } finally {
+            setIsLoadingFavorites(false);
+        }
+    };
 
     // Manejar cambios en los campos del formulario
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
+
+        // NUEVO: Validación especial para el campo de correo
+        if (name === 'mail') {
+            if (value && !validateEmail(value)) {
+                setEmailError('Por favor, ingrese un correo electrónico válido');
+            } else {
+                setEmailError(null);
+            }
+        }
+
         setFormData(prev => ({
             ...prev,
             [name]: value
         }));
+
+        // Manejar cambios en el tipo de destino
+        if (name === 'destinationType') {
+            if (value === PAYMENT_DESTINATION.OWN) {
+                // Si cambia a préstamo propio, limpiar campos de terceros
+                setFormData(prev => ({
+                    ...prev,
+                    bankId: '',
+                    destinationName: '', // Limpiar el nombre del destinatario
+                    mail: '' // Limpiar el correo electrónico
+                }));
+                setSelectedFavorite('');
+            } else if (value === PAYMENT_DESTINATION.THIRD_PARTY) {
+                // Si cambia a terceros, limpiar el campo de préstamo y cargar bancos y favoritos
+                setFormData(prev => ({
+                    ...prev,
+                    loanId: '', // Limpiar el campo de préstamo al cambiar a terceros
+                    destinationName: '', // Inicializar en blanco
+                    mail: '' // Inicializar en blanco
+                }));
+                setSelectedFavorite('');
+                fetchBanks();
+                if (customerId) {
+                    fetchFavorites();
+                }
+            }
+        }
 
         // Si cambia la cuenta de origen, actualizamos la moneda
         if (name === 'sourceAccountId') {
@@ -105,6 +270,80 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
                     currency: selectedAccount.currency || 'USD'
                 }));
             }
+        }
+
+        // Limpiar el favorito seleccionado si se cambia manualmente algún campo relevante
+        if (name !== 'destinationType' && name !== 'sourceAccountId' && name !== 'paymentType') {
+            setSelectedFavorite('');
+        }
+    };
+
+    // Manejar selección de favorito
+    const handleFavoriteSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const favoriteId = e.target.value;
+        setSelectedFavorite(favoriteId);
+
+        if (favoriteId) {
+            const selected = favorites.find(fav => fav.favoriteId === favoriteId);
+            if (selected) {
+                // Actualizar formulario con datos del favorito
+                setFormData(prev => ({
+                    ...prev,
+                    loanId: selected.loanNumber || '',
+                    bankId: selected.destinationBank || '',
+                    description: selected.description || prev.description,
+                    destinationName: selected.destinationName || '', // NUEVO: Incluir nombre del destinatario
+                    mail: selected.mail || '' // NUEVO: Incluir correo electrónico
+                }));
+
+                // NUEVO: Resetear error de email si el favorito tiene un email válido
+                if (selected.mail && validateEmail(selected.mail)) {
+                    setEmailError(null);
+                }
+            }
+        }
+    };
+
+    // Crear nuevo favorito
+    const handleSaveFavorite = async () => {
+        if (!customerId) {
+            setError('No se puede guardar como favorito: ID de cliente no disponible');
+            return;
+        }
+
+        if (!favoriteName.trim()) {
+            setError('Debe ingresar un nombre para el favorito');
+            return;
+        }
+
+        // NUEVO: Validar correo antes de guardar
+        if (formData.mail && !validateEmail(formData.mail)) {
+            setError('El correo electrónico del favorito no es válido');
+            return;
+        }
+
+        try {
+            setIsSavingFavorite(true);
+            const favoriteData = {
+                favoriteType: 'LOAN_PAYMENT' as FavoriteType,
+                name: favoriteName,
+                description: formData.description,
+                loanNumber: formData.loanId,
+                destinationBank: formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY ? formData.bankId : undefined,
+                destinationName: formData.destinationName, // NUEVO: Incluir nombre del destinatario
+                mail: formData.mail // NUEVO: Incluir correo electrónico
+            };
+
+            await favoritesService.createFavorite(customerId, favoriteData);
+            await fetchFavorites(); // Recargar la lista de favoritos
+            setSaveFavorite(false);
+            setFavoriteName('');
+            setError(null);
+        } catch (err) {
+            console.error('Error al guardar favorito:', err);
+            setError('No se pudo guardar el favorito');
+        } finally {
+            setIsSavingFavorite(false);
         }
     };
 
@@ -117,6 +356,23 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
         if (!formData.loanId) {
             setError('Debe seleccionar un préstamo a pagar');
             return false;
+        }
+        if (formData.destinationType === 'THIRD_PARTY' && !formData.bankId) {
+            setError('Debe seleccionar un banco destino');
+            return false;
+        }
+
+        // NUEVO: Validaciones para nombre del destinatario y correo
+        if (formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY) {
+            if (!formData.destinationName.trim()) {
+                setError('Debe ingresar el nombre del destinatario');
+                return false;
+            }
+
+            if (formData.mail && !validateEmail(formData.mail)) {
+                setError('El formato del correo electrónico no es válido');
+                return false;
+            }
         }
 
         const amount = parseFloat(formData.amount);
@@ -170,8 +426,12 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
                 throw new Error('Monto inválido');
             }
 
+            // Generar un ID de transacción único para esta operación
+            const transactionId = `LOAN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 8)}`;
+
             // Preparar datos para la API
-            const paymentData: Omit<LoanPaymentRequest, 'transactionId'> = {
+            const paymentData: LoanPaymentRequest = {
+                transactionId,
                 sourceAccountId: formData.sourceAccountId,
                 loanId: formData.loanId,
                 amount: amount,
@@ -179,6 +439,11 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
                 paymentType: formData.paymentType,
                 reference: formData.reference || undefined,
                 description: formData.description || undefined,
+                // Añadir información del banco destino si es pago a terceros
+                destinationBank: formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY ? formData.bankId : undefined,
+                destinationType: formData.destinationType,
+                destinationName: formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY ? formData.destinationName : undefined, // NUEVO
+                mail: formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY && formData.mail ? formData.mail : undefined, // NUEVO
                 metadata: {
                     channel: 'WEB_BANKING',
                     ipAddress: '127.0.0.1',
@@ -246,9 +511,80 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
         return `${loan.productName || 'Préstamo'} - ${loanId.replace(/(\d{4})(\d{4})(\d{2})/, '$1 $2 $3')}`;
     };
 
+    // Obtener nombre del banco a partir del ID
+    const getBankName = (bankId: string): string => {
+        const bank = banks.find(b => b.bankId === bankId);
+        return bank ? bank.name : 'Banco desconocido';
+    };
+
     // Renderizar el paso del formulario
     const renderFormStep = () => (
         <>
+            {/* Tipo de Destino - SIEMPRE APARECE PRIMERO */}
+            <div className="mb-5">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Pago</label>
+                <Select
+                    name="destinationType"
+                    value={formData.destinationType}
+                    onChange={handleInputChange}
+                    className="w-full"
+                    required
+                >
+                    <option value={PAYMENT_DESTINATION.OWN}>Préstamo Propio</option>
+                    <option value={PAYMENT_DESTINATION.THIRD_PARTY}>Préstamo de Terceros</option>
+                </Select>
+            </div>
+
+            {/* SECCIÓN PARA PAGO A TERCEROS */}
+            {formData.destinationType === 'THIRD_PARTY' && (
+                <>
+                    {/* Selector de Favoritos - Solo para pagos a terceros */}
+                    {customerId && (
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Favoritos</label>
+                            <Select
+                                name="favorite"
+                                value={selectedFavorite}
+                                onChange={handleFavoriteSelect}
+                                className="w-full"
+                            >
+                                <option value="">Seleccione un favorito (opcional)</option>
+                                {favorites.map(favorite => (
+                                    <option key={favorite.favoriteId} value={favorite.favoriteId}>
+                                        {favorite.name} {favorite.destinationBank ? `(${getBankName(favorite.destinationBank)})` : ''}
+                                    </option>
+                                ))}
+                            </Select>
+                            {isLoadingFavorites && <p className="text-sm text-gray-500 mt-1">Cargando favoritos...</p>}
+                            {favorites.length === 0 && !isLoadingFavorites && (
+                                <p className="text-sm text-gray-500 mt-1">No tiene favoritos guardados</p>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Selector de banco - Solo para pagos a terceros */}
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Banco Destino</label>
+                        <Select
+                            name="bankId"
+                            value={formData.bankId}
+                            onChange={handleInputChange}
+                            className="w-full"
+                            required
+                        >
+                            <option value="">Seleccione un banco</option>
+                            {banks.map(bank => (
+                                <option key={bank.bankId} value={bank.bankId}>
+                                    {bank.name}
+                                </option>
+                            ))}
+                        </Select>
+                        {isLoadingBanks && <p className="text-sm text-gray-500 mt-1">Cargando bancos...</p>}
+                    </div>
+                </>
+            )}
+
+            {/* Cuenta de Origen - Siempre visible */}
             <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Cuenta de Origen</label>
                 <Select
@@ -269,25 +605,77 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
                 </Select>
             </div>
 
+            {/* Préstamo a pagar - Cambia según el tipo */}
             <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Préstamo a Pagar</label>
-                <Select
-                    name="loanId"
-                    value={formData.loanId}
-                    onChange={handleInputChange}
-                    className="w-full"
-                    disabled={!!loanId}
-                    required
-                >
-                    <option value="">Seleccione un préstamo</option>
-                    {loans.map(loan => (
-                        <option key={loan.accountNumber} value={loan.accountNumber}>
-                            {loan.productName || 'Préstamo'} - {loan.accountNumber.replace(/(\d{4})(\d{4})(\d{2})/, '$1 $2 $3')}
-                            ({formatCurrency(loan.balance || 0, loan.currency)})
-                        </option>
-                    ))}
-                </Select>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {formData.destinationType === 'OWN' ? 'Préstamo a Pagar' : 'Préstamo del Beneficiario'}
+                </label>
+                {formData.destinationType === 'OWN' ? (
+                    <Select
+                        name="loanId"
+                        value={formData.loanId}
+                        onChange={handleInputChange}
+                        className="w-full"
+                        disabled={!!loanId}
+                        required
+                    >
+                        <option value="">Seleccione un préstamo</option>
+                        {loans.map(loan => (
+                            <option key={loan.accountNumber} value={loan.accountNumber}>
+                                {loan.productName || 'Préstamo'} - {loan.accountNumber.replace(/(\d{4})(\d{4})(\d{2})/, '$1 $2 $3')}
+                                ({formatCurrency(loan.balance || 0, loan.currency)})
+                            </option>
+                        ))}
+                    </Select>
+                ) : (
+                    <Input
+                        id="loanId"
+                        type="text"
+                        name="loanId"
+                        value={formData.loanId}
+                        onChange={handleInputChange}
+                        placeholder="Número de préstamo"
+                        className="w-full"
+                        required
+                    />
+                )}
             </div>
+
+            {/* NUEVO: Validaciones para nombre del destinatario y correo */}
+            {formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY && (
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del Beneficiario</label>
+                    <Input
+                        id="destinationName"
+                        type="text"
+                        name="destinationName"
+                        value={formData.destinationName}
+                        onChange={handleInputChange}
+                        placeholder="Nombre completo del beneficiario"
+                        className="w-full"
+                        required
+                    />
+                </div>
+            )}
+
+            {/* NUEVO: Correo Electrónico - Solo visible para pagos a terceros */}
+            {formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY && (
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Correo Electrónico</label>
+                    <Input
+                        id="mail"
+                        type="email"
+                        name="mail"
+                        value={formData.mail}
+                        onChange={handleInputChange}
+                        placeholder="ejemplo@correo.com"
+                        className={`w-full ${emailError ? 'border-red-500' : ''}`}
+                    />
+                    {emailError && (
+                        <p className="text-xs text-red-500 mt-1">{emailError}</p>
+                    )}
+                </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
@@ -359,6 +747,54 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
                 />
             </div>
 
+            {/* Opción para guardar como favorito - Solo para pagos a terceros */}
+            {formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY && customerId && (
+                <div className="mb-4">
+                    <div className="flex items-center">
+                        <input
+                            id="saveFavorite"
+                            type="checkbox"
+                            className="h-4 w-4 text-primary-600 border-gray-300 rounded"
+                            checked={saveFavorite}
+                            onChange={() => setSaveFavorite(!saveFavorite)}
+                        />
+                        <label htmlFor="saveFavorite" className="ml-2 block text-sm text-gray-700">
+                            Guardar como favorito
+                        </label>
+                    </div>
+                </div>
+            )}
+
+            {/* Campo de nombre para favorito (visible solo si se va a guardar) */}
+            {formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY && saveFavorite && customerId && (
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del Favorito</label>
+                    <div className="flex space-x-2">
+                        <Input
+                            id="favoriteName"
+                            type="text"
+                            value={favoriteName}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFavoriteName(e.target.value)}
+                            placeholder="Ej: Pago mensual hipoteca"
+                            className="w-full"
+                            required
+                        />
+                        <Button
+                            variant="secondary"
+                            onClick={handleSaveFavorite}
+                            disabled={isSavingFavorite || !favoriteName.trim()}
+                        >
+                            {isSavingFavorite ? (
+                                <>
+                                    <Spinner size="sm" className="mr-2" />
+                                    Guardando...
+                                </>
+                            ) : 'Guardar'}
+                        </Button>
+                    </div>
+                </div>
+            )}
+
             {error && (
                 <Alert variant="error" className="mb-4" onClose={() => setError(null)}>
                     {error}
@@ -388,28 +824,64 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
 
                     <div className="space-y-3">
                         <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Tipo de Pago:</span>
+                            <span className="text-sm font-medium">
+                                {formData.destinationType === 'OWN' ? 'Préstamo Propio' : 'Préstamo de Terceros'}
+                            </span>
+                        </div>
+
+                        {formData.destinationType === 'THIRD_PARTY' && (
+                            <div className="flex justify-between">
+                                <span className="text-sm text-gray-600">Banco Destino:</span>
+                                <span className="text-sm font-medium">{getBankName(formData.bankId || '')}</span>
+                            </div>
+                        )}
+
+                        <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Cuenta de Origen:</span>
                             <span className="text-sm font-medium">{getAccountDetails(formData.sourceAccountId)}</span>
                         </div>
 
                         <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Préstamo a Pagar:</span>
-                            <span className="text-sm font-medium">{getLoanDetails(formData.loanId)}</span>
+                            <span className="text-sm text-gray-600">
+                                {formData.destinationType === 'OWN' ? 'Préstamo a Pagar:' : 'Préstamo del Beneficiario:'}
+                            </span>
+                            <span className="text-sm font-medium">
+                                {formData.destinationType === 'OWN'
+                                    ? getLoanDetails(formData.loanId)
+                                    : formData.loanId.replace(/(\d{4})(\d{4})(\d{2})/, '$1 $2 $3')}
+                            </span>
                         </div>
+
+                        {/* NUEVO: Mostrar nombre del beneficiario en confirmación */}
+                        {formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY && formData.destinationName && (
+                            <div className="flex justify-between">
+                                <span className="text-sm text-gray-600">Nombre del Beneficiario:</span>
+                                <span className="text-sm font-medium">{formData.destinationName}</span>
+                            </div>
+                        )}
+
+                        {/* NUEVO: Mostrar correo en confirmación si existe */}
+                        {formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY && formData.mail && (
+                            <div className="flex justify-between">
+                                <span className="text-sm text-gray-600">Correo Electrónico:</span>
+                                <span className="text-sm font-medium">{formData.mail}</span>
+                            </div>
+                        )}
 
                         <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Monto a Pagar:</span>
                             <span className="text-sm font-medium text-primary-700">
-                {formatCurrency(amount, formData.currency)}
-              </span>
+                                {formatCurrency(amount, formData.currency)}
+                            </span>
                         </div>
 
                         <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Tipo de Pago:</span>
                             <span className="text-sm font-medium">
-                {formData.paymentType === PaymentType.REGULAR ? 'Pago Regular' :
-                    formData.paymentType === PaymentType.EXTRA ? 'Pago Extra' : 'Liquidación Total'}
-              </span>
+                                {formData.paymentType === PaymentType.REGULAR ? 'Pago Regular' :
+                                    formData.paymentType === PaymentType.EXTRA ? 'Pago Extra' : 'Liquidación Total'}
+                            </span>
                         </div>
 
                         {formData.reference && (
@@ -431,11 +903,11 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
                             <div className="flex justify-between pt-2 border-t border-gray-200">
                                 <span className="text-sm text-gray-600">Saldo Disponible Después:</span>
                                 <span className="text-sm font-medium">
-                  {formatCurrency(
-                      (sourceAccount.balance || 0) - (isNaN(amount) ? 0 : amount),
-                      sourceAccount.currency || 'USD'
-                  )}
-                </span>
+                                    {formatCurrency(
+                                        (sourceAccount.balance || 0) - (isNaN(amount) ? 0 : amount),
+                                        sourceAccount.currency || 'USD'
+                                    )}
+                                </span>
                             </div>
                         )}
                     </div>
@@ -512,8 +984,8 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
                             <div className="flex justify-between">
                                 <span className="text-sm text-gray-600">Fecha y Hora:</span>
                                 <span className="text-sm font-medium">
-                  {new Date(paymentResult.result.transactionDateTime).toLocaleString('es-PA')}
-                </span>
+                                    {new Date(paymentResult.result.transactionDateTime).toLocaleString('es-PA')}
+                                </span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-gray-600">De Cuenta:</span>
@@ -523,6 +995,19 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
                                 <span className="text-sm text-gray-600">A Préstamo:</span>
                                 <span className="text-sm">{paymentResult.result.loanId}</span>
                             </div>
+                            {/* NUEVO: Mostrar beneficiario en el recibo */}
+                            {formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY && formData.destinationName && (
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-gray-600">Beneficiario:</span>
+                                    <span className="text-sm">{formData.destinationName}</span>
+                                </div>
+                            )}
+                            {formData.destinationType === PAYMENT_DESTINATION.THIRD_PARTY && (
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-gray-600">Banco Destino:</span>
+                                    <span className="text-sm">{getBankName(formData.bankId || '')}</span>
+                                </div>
+                            )}
                             <div className="flex justify-between">
                                 <span className="text-sm text-gray-600">Monto:</span>
                                 <span className="text-sm font-medium">{formatCurrency(amount, formData.currency)}</span>
@@ -530,21 +1015,21 @@ const LoanPaymentModal: React.FC<LoanPaymentModalProps> = ({
                             <div className="flex justify-between">
                                 <span className="text-sm text-gray-600">Nuevo Saldo de Cuenta:</span>
                                 <span className="text-sm font-medium">
-                  {formatCurrency(paymentResult.result.sourceNewBalance, formData.currency)}
-                </span>
+                                    {formatCurrency(paymentResult.result.sourceNewBalance, formData.currency)}
+                                </span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-gray-600">Saldo Restante del Préstamo:</span>
                                 <span className="text-sm font-medium">
-                  {formatCurrency(paymentResult.result.remainingLoanBalance, formData.currency)}
-                </span>
+                                    {formatCurrency(paymentResult.result.remainingLoanBalance, formData.currency)}
+                                </span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-gray-600">Próximo Pago:</span>
                                 <span className="text-sm font-medium">
-                  {new Date(paymentResult.result.nextPaymentDate).toLocaleDateString('es-PA')} -
+                                    {new Date(paymentResult.result.nextPaymentDate).toLocaleDateString('es-PA')} -
                                     {formatCurrency(paymentResult.result.nextPaymentAmount, formData.currency)}
-                </span>
+                                </span>
                             </div>
                         </div>
                     </div>

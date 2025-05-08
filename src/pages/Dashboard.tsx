@@ -305,6 +305,7 @@ const Dashboard: React.FC = () => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoadingNotifications, setIsLoadingNotifications] = useState<boolean>(false);
     const [autoRetryEnabled, setAutoRetryEnabled] = useState<boolean>(true);
+    const [customerId, setCustomerId] = useState<string | undefined>(undefined);
 
     // Estados para los modales
     const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
@@ -321,16 +322,19 @@ const Dashboard: React.FC = () => {
             setError(null);
 
             // Obtener el ID del cliente desde el usuario autenticado
-            const customerId = user?.attributes?.["custom:customerid"];
+            const customerIdFromUser = user?.attributes?.["custom:customerid"];
 
-            if (!customerId) {
+            if (!customerIdFromUser) {
                 setError("No se encontró el ID de cliente. Por favor, contacte con soporte.");
                 setIsLoading(false);
                 return;
             }
 
+            // Guardar el customerId en el estado
+            setCustomerId(customerIdFromUser);
+
             // Llamada real a la API usando el servicio
-            const response = await productService.getCustomerProducts(customerId);
+            const response = await productService.getCustomerProducts(customerIdFromUser);
 
             if (response && response.data && response.data.products) {
                 setProducts(response.data.products);
@@ -683,23 +687,29 @@ const Dashboard: React.FC = () => {
             </main>
 
             {/* Modal de Transferencias */}
-            <TransferModal
-                isOpen={isTransferModalOpen}
-                onClose={handleCloseTransferModal}
-                sourceAccountId={selectedSourceAccount}
-                products={products}
-                onSuccess={handleTransferSuccess}
-            />
+            {customerId && (
+                <TransferModal
+                    isOpen={isTransferModalOpen}
+                    onClose={handleCloseTransferModal}
+                    sourceAccountId={selectedSourceAccount}
+                    products={products}
+                    onSuccess={handleTransferSuccess}
+                    customerId={customerId}
+                />
+            )}
 
             {/* Modal de Pago de Préstamos */}
-            <LoanPaymentModal
-                isOpen={isLoanPaymentModalOpen}
-                onClose={handleCloseLoanPaymentModal}
-                loanId={selectedLoanId}
-                sourceAccountId={selectedSourceAccount}
-                products={products}
-                onSuccess={handleLoanPaymentSuccess}
-            />
+            {customerId && (
+                <LoanPaymentModal
+                    isOpen={isLoanPaymentModalOpen}
+                    onClose={handleCloseLoanPaymentModal}
+                    loanId={selectedLoanId}
+                    sourceAccountId={selectedSourceAccount}
+                    products={products}
+                    onSuccess={handleLoanPaymentSuccess}
+                    customerId={customerId}
+                />
+            )}
 
             <Footer />
         </div>
