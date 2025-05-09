@@ -176,117 +176,118 @@ const ListView: React.FC<ProductsViewProps> = ({ products, onViewDetails, onTran
         }
     };
 
+    // Vista de lista para dispositivos móviles
     return (
-        <div className="overflow-hidden bg-white rounded-lg shadow">
-            <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Producto
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Número de Cuenta
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Saldo
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Detalles
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Acciones
-                    </th>
-                </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                {products.map(product => {
-                    // Determinar si el saldo es positivo o negativo
-                    const isPositiveBalance = product.productType === ProductTypeValues.CREDIT
-                        ? (product.balance || 0) <= 0
-                        : (product.balance || 0) >= 0;
+        <div className="space-y-4">
+            {products.map(product => {
+                // Determinar si el saldo es positivo o negativo
+                const isPositiveBalance = product.productType === ProductTypeValues.CREDIT
+                    ? (product.balance || 0) <= 0
+                    : (product.balance || 0) >= 0;
 
-                    // Asegurarse de que accountNumber es una cadena de texto para evitar errores
-                    const formattedAccountNumber = product.accountNumber
-                        ? product.accountNumber.replace(/(\d{4})(\d{4})(\d{2})/, '$1 $2 $3')
-                        : 'Número de cuenta no disponible';
+                // Asegurarse de que accountNumber es una cadena de texto para evitar errores
+                const formattedAccountNumber = product.accountNumber
+                    ? product.accountNumber.replace(/(\d{4})(\d{4})(\d{2})/, '$1 $2 $3')
+                    : 'Número de cuenta no disponible';
 
-                    return (
-                        <tr key={product.productId} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="flex items-center">
-                                    {getProductIcon(product.productType)}
-                                    <div className="ml-3">
-                                        <div className="text-sm font-medium text-gray-900">{product.productName || 'Producto'}</div>
-                                        <div className="text-xs text-gray-500">{product.productType}</div>
-                                    </div>
+                return (
+                    <div key={product.productId} className="bg-white rounded-lg shadow overflow-hidden">
+                        {/* Encabezado del producto */}
+                        <div className="p-4 flex items-center justify-between border-b border-gray-100">
+                            <div className="flex items-center">
+                                {getProductIcon(product.productType)}
+                                <div className="ml-3">
+                                    <div className="text-sm font-medium text-gray-900">{product.productName || 'Producto'}</div>
+                                    <div className="text-xs text-gray-500">{formattedAccountNumber}</div>
                                 </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">{formattedAccountNumber}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                                <div className={`text-sm font-semibold ${isPositiveBalance ? 'text-green-600' : 'text-red-600'}`}>
+                            </div>
+                            <div className={`text-right ${isPositiveBalance ? 'text-green-600' : 'text-red-600'}`}>
+                                <div className="text-sm font-semibold">
                                     {formatCurrency(product.balance || 0, product.currency || 'USD')}
                                 </div>
                                 <div className="text-xs text-gray-500">
                                     {product.productType === ProductTypeValues.CREDIT ? 'Saldo por pagar' : 'Saldo disponible'}
                                 </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {product.productType === ProductTypeValues.CREDIT && product.additionalData && (
-                                    <div>
-                                        <div>Tasa: {product.additionalData.interestRate || 0}%</div>
-                                        <div>Próximo pago: {
-                                            product.additionalData.nextPaymentDate
-                                                ? new Date(product.additionalData.nextPaymentDate).toLocaleDateString('es-PA')
-                                                : 'No disponible'
-                                        }</div>
-                                    </div>
-                                )}
-                                {product.productType === ProductTypeValues.SAVINGS && product.additionalData && (
-                                    <div>
-                                        <div>Tasa: {product.additionalData.interestRate || 0}%</div>
-                                        <div>Último interés: {
-                                            product.additionalData.lastInterestDate
-                                                ? new Date(product.additionalData.lastInterestDate).toLocaleDateString('es-PA')
-                                                : 'No disponible'
-                                        }</div>
-                                    </div>
-                                )}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <div className="flex justify-end space-x-2">
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => onViewDetails(product.accountNumber, product.productType)}
-                                    >
-                                        Detalle
-                                    </Button>
+                            </div>
+                        </div>
 
-                                    {product.productType === ProductTypeValues.CREDIT && (
-                                        <Button
-                                            size="sm"
-                                            onClick={() => onPayLoan(product.accountNumber)}
-                                        >
-                                            Pagar
-                                        </Button>
-                                    )}
-                                    {(product.productType === ProductTypeValues.SAVINGS || product.productType === ProductTypeValues.DEPOSIT) && (
-                                        <Button
-                                            size="sm"
-                                            onClick={() => onTransfer(product.accountNumber)}
-                                        >
-                                            Transferir
-                                        </Button>
-                                    )}
+                        {/* Detalles del producto */}
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                            {product.productType === ProductTypeValues.CREDIT && product.additionalData && (
+                                <div className="grid grid-cols-2 gap-x-4 text-sm">
+                                    <div>
+                                        <span className="text-gray-500">Tasa de interés:</span>
+                                        <span className="ml-1 font-medium">{product.additionalData.interestRate || 0}%</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-500">Próximo pago:</span>
+                                        <span className="ml-1 font-medium">
+                                            {product.additionalData.nextPaymentDate
+                                                ? new Date(product.additionalData.nextPaymentDate).toLocaleDateString('es-PA')
+                                                : 'No disponible'}
+                                        </span>
+                                    </div>
                                 </div>
-                            </td>
-                        </tr>
-                    );
-                })}
-                </tbody>
-            </table>
+                            )}
+
+                            {product.productType === ProductTypeValues.SAVINGS && product.additionalData && (
+                                <div className="grid grid-cols-2 gap-x-4 text-sm">
+                                    <div>
+                                        <span className="text-gray-500">Tasa de interés:</span>
+                                        <span className="ml-1 font-medium">{product.additionalData.interestRate || 0}%</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-500">Último interés:</span>
+                                        <span className="ml-1 font-medium">
+                                            {product.additionalData.lastInterestDate
+                                                ? new Date(product.additionalData.lastInterestDate).toLocaleDateString('es-PA')
+                                                : 'No disponible'}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {(!product.additionalData ||
+                                (product.productType !== ProductTypeValues.CREDIT &&
+                                    product.productType !== ProductTypeValues.SAVINGS)) && (
+                                <div className="text-sm text-gray-500">
+                                    No hay información adicional disponible
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Acciones */}
+                        <div className="p-4 flex items-center justify-between">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onViewDetails(product.accountNumber, product.productType)}
+                            >
+                                Ver detalle
+                            </Button>
+
+                            <div>
+                                {product.productType === ProductTypeValues.CREDIT && (
+                                    <Button
+                                        size="sm"
+                                        onClick={() => onPayLoan(product.accountNumber)}
+                                    >
+                                        Pagar
+                                    </Button>
+                                )}
+                                {(product.productType === ProductTypeValues.SAVINGS || product.productType === ProductTypeValues.DEPOSIT) && (
+                                    <Button
+                                        size="sm"
+                                        onClick={() => onTransfer(product.accountNumber)}
+                                    >
+                                        Transferir
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })}
         </div>
     );
 };
