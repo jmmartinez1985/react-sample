@@ -15,16 +15,69 @@ import productService from '@services/productService';
 import notificationService from '@services/notificationService';
 import { TransferResponse } from '@services/transferService';
 import { LoanPaymentResponse } from '@services/loanPaymentService';
-import { Product, ProductType } from '@/types/products';
+import { Product } from '@/types/products';
 import { User } from '@/types';
 
-// Definición de interfaces para props
+// Definición de tipos
 interface ProfileSummaryProps {
     user: User | null;
     onViewProfile: () => void;
 }
 
-// Componente para mostrar un resumen del perfil del usuario
+interface ProductCardProps {
+    product: Product;
+    onViewDetails: (productId: string, productType: string) => void;
+    onTransfer: (accountId: string) => void;
+    onPayLoan: (loanId: string) => void;
+}
+
+interface ProductsViewProps {
+    products: Product[];
+    onViewDetails: (productId: string, productType: string) => void;
+    onTransfer: (accountId: string) => void;
+    onPayLoan: (loanId: string) => void;
+}
+
+interface QuickActionsProps {
+    onTransfer: () => void;
+    onPayLoan: () => void;
+}
+
+interface Notification {
+    id: string;
+    title: string;
+    message: string;
+    type: 'info' | 'warning' | 'success' | 'error';
+    date: string;
+    read: boolean;
+}
+
+interface NotificationsCardProps {
+    notifications: Notification[];
+    isLoading: boolean;
+}
+
+interface AutoRetryResult {
+    isRetrying: boolean;
+    retryCount: number;
+    maxRetries: number;
+}
+
+// Enum para los tipos de productos
+const ProductTypeValues = {
+    DEPOSIT: 'DEPOSIT',
+    SAVINGS: 'SAVINGS',
+    FIXED_TERM: 'FIXED_TERM',
+    CREDIT: 'CREDIT'
+} as const;
+
+// Enum para los tipos de vistas disponibles
+enum ViewType {
+    CARDS = 'cards',
+    LIST = 'list',
+}
+
+// Componente de perfil de usuario
 const ProfileSummary: React.FC<ProfileSummaryProps> = ({ user, onViewProfile }) => {
     return (
         <Card className="p-4 mb-6 bg-gradient-to-r from-primary-50 to-white">
@@ -49,25 +102,207 @@ const ProfileSummary: React.FC<ProfileSummaryProps> = ({ user, onViewProfile }) 
     );
 };
 
-interface ProductCardProps {
-    product: Product;
-    onViewDetails: (productId: string, productType: string) => void;
-    onTransfer: (accountId: string) => void;
-    onPayLoan: (loanId: string) => void;
-}
+// Componente para mostrar vista de tarjetas
+const CardView: React.FC<ProductsViewProps> = ({ products, onViewDetails, onTransfer, onPayLoan }) => {
+    return (
+        <div className="grid grid-cols-1 gap-6">
+            {products.map((product) => (
+                <ProductCard
+                    key={product.productId}
+                    product={product}
+                    onViewDetails={onViewDetails}
+                    onTransfer={onTransfer}
+                    onPayLoan={onPayLoan}
+                />
+            ))}
+        </div>
+    );
+};
+
+// Componente para mostrar vista de lista
+const ListView: React.FC<ProductsViewProps> = ({ products, onViewDetails, onTransfer, onPayLoan }) => {
+    // Formatear moneda
+    const formatCurrency = (amount: number, currency: string = 'USD'): string => {
+        return new Intl.NumberFormat('es-PA', {
+            style: 'currency',
+            currency: currency,
+            minimumFractionDigits: 2
+        }).format(amount);
+    };
+
+    // Obtener ícono según el tipo de producto
+    const getProductIcon = (productType: string): React.ReactNode => {
+        switch (productType) {
+            case ProductTypeValues.SAVINGS:
+                return (
+                    <div className="p-2 rounded-full bg-blue-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                );
+            case ProductTypeValues.CREDIT:
+                return (
+                    <div className="p-2 rounded-full bg-red-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
+                    </div>
+                );
+            case ProductTypeValues.DEPOSIT:
+                return (
+                    <div className="p-2 rounded-full bg-green-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                    </div>
+                );
+            case ProductTypeValues.FIXED_TERM:
+                return (
+                    <div className="p-2 rounded-full bg-purple-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                );
+            default:
+                return (
+                    <div className="p-2 rounded-full bg-gray-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                    </div>
+                );
+        }
+    };
+
+    return (
+        <div className="overflow-hidden bg-white rounded-lg shadow">
+            <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Producto
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Número de Cuenta
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Saldo
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Detalles
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Acciones
+                    </th>
+                </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                {products.map(product => {
+                    // Determinar si el saldo es positivo o negativo
+                    const isPositiveBalance = product.productType === ProductTypeValues.CREDIT
+                        ? (product.balance || 0) <= 0
+                        : (product.balance || 0) >= 0;
+
+                    // Asegurarse de que accountNumber es una cadena de texto para evitar errores
+                    const formattedAccountNumber = product.accountNumber
+                        ? product.accountNumber.replace(/(\d{4})(\d{4})(\d{2})/, '$1 $2 $3')
+                        : 'Número de cuenta no disponible';
+
+                    return (
+                        <tr key={product.productId} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center">
+                                    {getProductIcon(product.productType)}
+                                    <div className="ml-3">
+                                        <div className="text-sm font-medium text-gray-900">{product.productName || 'Producto'}</div>
+                                        <div className="text-xs text-gray-500">{product.productType}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">{formattedAccountNumber}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                                <div className={`text-sm font-semibold ${isPositiveBalance ? 'text-green-600' : 'text-red-600'}`}>
+                                    {formatCurrency(product.balance || 0, product.currency || 'USD')}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                    {product.productType === ProductTypeValues.CREDIT ? 'Saldo por pagar' : 'Saldo disponible'}
+                                </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {product.productType === ProductTypeValues.CREDIT && product.additionalData && (
+                                    <div>
+                                        <div>Tasa: {product.additionalData.interestRate || 0}%</div>
+                                        <div>Próximo pago: {
+                                            product.additionalData.nextPaymentDate
+                                                ? new Date(product.additionalData.nextPaymentDate).toLocaleDateString('es-PA')
+                                                : 'No disponible'
+                                        }</div>
+                                    </div>
+                                )}
+                                {product.productType === ProductTypeValues.SAVINGS && product.additionalData && (
+                                    <div>
+                                        <div>Tasa: {product.additionalData.interestRate || 0}%</div>
+                                        <div>Último interés: {
+                                            product.additionalData.lastInterestDate
+                                                ? new Date(product.additionalData.lastInterestDate).toLocaleDateString('es-PA')
+                                                : 'No disponible'
+                                        }</div>
+                                    </div>
+                                )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <div className="flex justify-end space-x-2">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => onViewDetails(product.accountNumber, product.productType)}
+                                    >
+                                        Detalle
+                                    </Button>
+
+                                    {product.productType === ProductTypeValues.CREDIT && (
+                                        <Button
+                                            size="sm"
+                                            onClick={() => onPayLoan(product.accountNumber)}
+                                        >
+                                            Pagar
+                                        </Button>
+                                    )}
+                                    {(product.productType === ProductTypeValues.SAVINGS || product.productType === ProductTypeValues.DEPOSIT) && (
+                                        <Button
+                                            size="sm"
+                                            onClick={() => onTransfer(product.accountNumber)}
+                                        >
+                                            Transferir
+                                        </Button>
+                                    )}
+                                </div>
+                            </td>
+                        </tr>
+                    );
+                })}
+                </tbody>
+            </table>
+        </div>
+    );
+};
 
 // Componente para mostrar un producto financiero en forma de tarjeta
 const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTransfer, onPayLoan }) => {
     // Función para determinar el color del borde según el tipo de producto
-    const getBorderColor = () => {
+    const getBorderColor = (): string => {
         switch (product.productType) {
-            case ProductType.SAVINGS:
+            case ProductTypeValues.SAVINGS:
                 return 'border-blue-500';
-            case ProductType.CREDIT:
+            case ProductTypeValues.CREDIT:
                 return 'border-red-500';
-            case ProductType.DEPOSIT:
+            case ProductTypeValues.DEPOSIT:
                 return 'border-green-500';
-            case ProductType.FIXED_TERM:
+            case ProductTypeValues.FIXED_TERM:
                 return 'border-purple-500';
             default:
                 return 'border-gray-200';
@@ -75,27 +310,27 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTra
     };
 
     // Función para obtener el icono según el tipo de producto
-    const getProductIcon = () => {
+    const getProductIcon = (): React.ReactNode => {
         switch (product.productType) {
-            case ProductType.SAVINGS:
+            case ProductTypeValues.SAVINGS:
                 return (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                 );
-            case ProductType.CREDIT:
+            case ProductTypeValues.CREDIT:
                 return (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                     </svg>
                 );
-            case ProductType.DEPOSIT:
+            case ProductTypeValues.DEPOSIT:
                 return (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                 );
-            case ProductType.FIXED_TERM:
+            case ProductTypeValues.FIXED_TERM:
                 return (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -111,7 +346,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTra
     };
 
     // Formatear el saldo con separador de miles y dos decimales
-    const formatCurrency = (amount: number, currency: string = 'USD') => {
+    const formatCurrency = (amount: number, currency: string = 'USD'): string => {
         return new Intl.NumberFormat('es-PA', {
             style: 'currency',
             currency: currency,
@@ -120,7 +355,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTra
     };
 
     // Determinar si el saldo es positivo o negativo
-    const isPositiveBalance = product.productType === ProductType.CREDIT
+    const isPositiveBalance = product.productType === ProductTypeValues.CREDIT
         ? (product.balance || 0) <= 0
         : (product.balance || 0) >= 0;
 
@@ -147,13 +382,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTra
                             {formatCurrency(product.balance || 0, product.currency || 'USD')}
                         </p>
                         <p className="text-xs text-gray-500">
-                            {product.productType === ProductType.CREDIT ? 'Saldo por pagar' : 'Saldo disponible'}
+                            {product.productType === ProductTypeValues.CREDIT ? 'Saldo por pagar' : 'Saldo disponible'}
                         </p>
                     </div>
                 </div>
 
                 {/* Información adicional según el tipo de producto */}
-                {product.productType === ProductType.CREDIT && product.additionalData && (
+                {product.productType === ProductTypeValues.CREDIT && product.additionalData && (
                     <div className="mt-4 pt-4 border-t border-gray-100">
                         <div className="grid grid-cols-2 gap-2">
                             <div>
@@ -172,7 +407,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTra
                     </div>
                 )}
 
-                {product.productType === ProductType.SAVINGS && product.additionalData && (
+                {product.productType === ProductTypeValues.SAVINGS && product.additionalData && (
                     <div className="mt-4 pt-4 border-t border-gray-100">
                         <div className="grid grid-cols-2 gap-2">
                             <div>
@@ -204,7 +439,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTra
                     </div>
 
                     {/* Botón primario según el tipo de producto */}
-                    {product.productType === ProductType.CREDIT && (
+                    {product.productType === ProductTypeValues.CREDIT && (
                         <Button
                             size="sm"
                             onClick={() => onPayLoan(product.accountNumber)}
@@ -212,7 +447,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTra
                             Pagar
                         </Button>
                     )}
-                    {(product.productType === ProductType.SAVINGS || product.productType === ProductType.DEPOSIT) && (
+                    {(product.productType === ProductTypeValues.SAVINGS || product.productType === ProductTypeValues.DEPOSIT) && (
                         <Button
                             size="sm"
                             onClick={() => onTransfer(product.accountNumber)}
@@ -226,24 +461,146 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onViewDetails, onTra
     );
 };
 
-// Interfaz para las notificaciones
-interface Notification {
-    id: string;
-    title: string;
-    message: string;
-    type: 'info' | 'warning' | 'success' | 'error';
-    date: string;
-    read: boolean;
-}
+// Componente para mostrar acciones rápidas
+const QuickActions: React.FC<QuickActionsProps> = ({ onTransfer, onPayLoan }) => {
+    return (
+        <Card className="p-6">
+            <h3 className="text-md font-medium text-gray-900 mb-4">Acciones Rápidas</h3>
+            <div className="space-y-3">
+                <button
+                    className="w-full flex items-center p-3 rounded-md hover:bg-gray-50 transition-colors"
+                    onClick={onTransfer}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                    <span className="text-gray-700">Realizar transferencia</span>
+                </button>
+                <button
+                    className="w-full flex items-center p-3 rounded-md hover:bg-gray-50 transition-colors"
+                    onClick={onPayLoan}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-gray-700">Pagar préstamo</span>
+                </button>
+                <button className="w-full flex items-center p-3 rounded-md hover:bg-gray-50 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span className="text-gray-700">Estado de cuenta</span>
+                </button>
+                <button className="w-full flex items-center p-3 rounded-md hover:bg-gray-50 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-gray-700">Ayuda</span>
+                </button>
+            </div>
+        </Card>
+    );
+};
+
+// Componente para mostrar notificaciones
+const NotificationsCard: React.FC<NotificationsCardProps> = ({ notifications, isLoading }) => {
+    return (
+        <Card className="p-6">
+            <h3 className="text-md font-medium text-gray-900 mb-4">Notificaciones</h3>
+            <div className="space-y-3">
+                {isLoading ? (
+                    <div className="text-center py-4">
+                        <Spinner size="sm" className="mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">Cargando notificaciones...</p>
+                    </div>
+                ) : notifications.length > 0 ? (
+                    notifications.map(notification => (
+                        <div
+                            key={notification.id}
+                            className={`p-3 rounded-md ${
+                                notification.type === 'info' ? 'bg-blue-50 border-l-4 border-blue-500' :
+                                    notification.type === 'warning' ? 'bg-yellow-50 border-l-4 border-yellow-500' :
+                                        notification.type === 'success' ? 'bg-green-50 border-l-4 border-green-500' :
+                                            notification.type === 'error' ? 'bg-red-50 border-l-4 border-red-500' :
+                                                'bg-gray-50'
+                            }`}
+                        >
+                            <h4 className={`text-sm font-medium ${
+                                notification.type === 'info' ? 'text-blue-800' :
+                                    notification.type === 'warning' ? 'text-yellow-800' :
+                                        notification.type === 'success' ? 'text-green-800' :
+                                            notification.type === 'error' ? 'text-red-800' :
+                                                'text-gray-800'
+                            }`}>
+                                {notification.title}
+                            </h4>
+                            <p className={`text-xs mt-1 ${
+                                notification.type === 'info' ? 'text-blue-700' :
+                                    notification.type === 'warning' ? 'text-yellow-700' :
+                                        notification.type === 'success' ? 'text-green-700' :
+                                            notification.type === 'error' ? 'text-red-700' :
+                                                'text-gray-600'
+                            }`}>
+                                {notification.message}
+                            </p>
+                        </div>
+                    ))
+                ) : (
+                    <p className="text-sm text-gray-500 text-center py-4">
+                        No tiene notificaciones nuevas
+                    </p>
+                )}
+            </div>
+        </Card>
+    );
+};
+
+// Componente para mostrar información de contacto
+const ContactInfoCard: React.FC = () => {
+    return (
+        <Card className="p-6">
+            <h3 className="text-md font-medium text-gray-900 mb-4">Contacto</h3>
+            <div className="space-y-3">
+                <div className="flex items-start">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                    <div>
+                        <p className="text-sm font-medium text-gray-900">Servicio al Cliente</p>
+                        <p className="text-sm text-gray-600">+507 300-2100</p>
+                    </div>
+                </div>
+                <div className="flex items-start">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <div>
+                        <p className="text-sm font-medium text-gray-900">Correo Electrónico</p>
+                        <p className="text-sm text-gray-600">servicio@lahipotecaria.com</p>
+                    </div>
+                </div>
+                <div className="flex items-start">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                        <p className="text-sm font-medium text-gray-900">Horario de Atención</p>
+                        <p className="text-sm text-gray-600">Lunes a Viernes: 8:00 AM - 5:00 PM</p>
+                    </div>
+                </div>
+            </div>
+        </Card>
+    );
+};
 
 // Hook personalizado para reintentar operaciones después de un error
-const useAutoRetry = (
+const useAutoRetry = <T extends any[]>(
     callback: () => Promise<void>,
-    dependencies: any[],
+    dependencies: T,
     errorState: string | null,
     retryDelay: number = 5000,
     maxRetries: number = 3
-) => {
+): AutoRetryResult => {
     const retryCountRef = useRef<number>(0);
     const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
     const isRetryingRef = useRef<boolean>(false);
@@ -287,6 +644,8 @@ const useAutoRetry = (
                 retryTimerRef.current = null;
             }
         }
+        // Este useEffect depende de errorState, callback, retryDelay, maxRetries y dependencies
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [errorState, callback, retryDelay, maxRetries, ...dependencies]);
 
     return {
@@ -296,6 +655,7 @@ const useAutoRetry = (
     };
 };
 
+// Componente principal Dashboard
 const Dashboard: React.FC = () => {
     const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
     const [products, setProducts] = useState<Product[]>([]);
@@ -306,6 +666,7 @@ const Dashboard: React.FC = () => {
     const [isLoadingNotifications, setIsLoadingNotifications] = useState<boolean>(false);
     const [autoRetryEnabled, setAutoRetryEnabled] = useState<boolean>(true);
     const [customerId, setCustomerId] = useState<string | undefined>(undefined);
+    const [viewType, setViewType] = useState<ViewType>(ViewType.CARDS); // Estado para controlar el tipo de vista
 
     // Estados para los modales
     const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
@@ -316,7 +677,7 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
 
     // Función para cargar productos del cliente
-    const fetchProducts = async () => {
+    const fetchProducts = async (): Promise<void> => {
         try {
             setIsLoading(true);
             setError(null);
@@ -360,7 +721,7 @@ const Dashboard: React.FC = () => {
         3     // máximo 3 intentos
     );
 
-    const fetchNotifications = async () => {
+    const fetchNotifications = async (): Promise<void> => {
         try {
             setIsLoadingNotifications(true);
 
@@ -406,32 +767,47 @@ const Dashboard: React.FC = () => {
     }, [isAuthenticated, authLoading, user]);
 
     // Función para navegar al detalle del producto
-    const handleViewDetails = (productId: string, productType: string) => {
+    const handleViewDetails = (productId: string, productType: string): void => {
         navigate(`/products/${productId}`, { state: { productType } });
     };
 
     // Redirección al perfil de usuario
-    const handleViewProfile = () => {
+    const handleViewProfile = (): void => {
         navigate('/profile');
     };
 
     // Función para refrescar manualmente los datos
-    const handleRefresh = () => {
+    const handleRefresh = (): void => {
         fetchProducts();
     };
 
+    // Función para cambiar el tipo de vista
+    const handleViewTypeChange = (type: ViewType): void => {
+        setViewType(type);
+        // Guardar la preferencia en localStorage
+        localStorage.setItem('dashboardViewType', type);
+    };
+
+    // Recuperar preferencia de vista al cargar
+    useEffect(() => {
+        const savedViewType = localStorage.getItem('dashboardViewType') as ViewType | null;
+        if (savedViewType && Object.values(ViewType).includes(savedViewType)) {
+            setViewType(savedViewType);
+        }
+    }, []);
+
     // Funciones para manejar el modal de transferencias
-    const handleOpenTransferModal = (sourceAccountId?: string) => {
+    const handleOpenTransferModal = (sourceAccountId?: string): void => {
         setSelectedSourceAccount(sourceAccountId);
         setIsTransferModalOpen(true);
     };
 
-    const handleCloseTransferModal = () => {
+    const handleCloseTransferModal = (): void => {
         setIsTransferModalOpen(false);
         setSelectedSourceAccount(undefined);
     };
 
-    const handleTransferSuccess = (response: TransferResponse) => {
+    const handleTransferSuccess = (response: TransferResponse): void => {
         // Actualizar la lista de productos después de una transferencia exitosa
         console.log(response);
         setTimeout(() => {
@@ -440,19 +816,19 @@ const Dashboard: React.FC = () => {
     };
 
     // Funciones para manejar el modal de pagos de préstamos
-    const handleOpenLoanPaymentModal = (loanId?: string, sourceAccountId?: string) => {
+    const handleOpenLoanPaymentModal = (loanId?: string, sourceAccountId?: string): void => {
         setSelectedLoanId(loanId);
         setSelectedSourceAccount(sourceAccountId);
         setIsLoanPaymentModalOpen(true);
     };
 
-    const handleCloseLoanPaymentModal = () => {
+    const handleCloseLoanPaymentModal = (): void => {
         setIsLoanPaymentModalOpen(false);
         setSelectedLoanId(undefined);
         setSelectedSourceAccount(undefined);
     };
 
-    const handleLoanPaymentSuccess = (response: LoanPaymentResponse) => {
+    const handleLoanPaymentSuccess = (response: LoanPaymentResponse): void => {
         // Actualizar la lista de productos después de un pago exitoso
         console.log(response);
         setTimeout(() => {
@@ -499,6 +875,31 @@ const Dashboard: React.FC = () => {
                                     Actualizado: {new Date(lastUpdate).toLocaleString('es-PA')}
                                 </p>
                             )}
+
+                            {/* Selector de tipo de vista con iconos */}
+                            <div className="ml-4 flex space-x-2 items-center">
+                                <button
+                                    className={`p-2 rounded-md transition-colors hover:bg-gray-100 ${viewType === ViewType.CARDS ? 'bg-primary-100 text-primary-600' : 'text-gray-500'}`}
+                                    onClick={() => handleViewTypeChange(ViewType.CARDS)}
+                                    title="Vista de Tarjetas"
+                                    aria-label="Cambiar a vista de tarjetas"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                                    </svg>
+                                </button>
+                                <button
+                                    className={`p-2 rounded-md transition-colors hover:bg-gray-100 ${viewType === ViewType.LIST ? 'bg-primary-100 text-primary-600' : 'text-gray-500'}`}
+                                    onClick={() => handleViewTypeChange(ViewType.LIST)}
+                                    title="Vista de Lista"
+                                    aria-label="Cambiar a vista de lista"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                                    </svg>
+                                </button>
+                            </div>
+
                             <Button
                                 variant="ghost"
                                 size="sm"
@@ -548,141 +949,41 @@ const Dashboard: React.FC = () => {
                             <Button variant="primary">Solicitar un producto</Button>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 gap-6">
-                            {products.map((product) => (
-                                <ProductCard
-                                    key={product.productId}
-                                    product={product}
-                                    onViewDetails={handleViewDetails}
-                                    onTransfer={handleOpenTransferModal}
-                                    onPayLoan={handleOpenLoanPaymentModal}
-                                />
-                            ))}
-                        </div>
+                        /* Renderizado condicional según el tipo de vista */
+                        viewType === ViewType.CARDS ? (
+                            <CardView
+                                products={products}
+                                onViewDetails={handleViewDetails}
+                                onTransfer={handleOpenTransferModal}
+                                onPayLoan={handleOpenLoanPaymentModal}
+                            />
+                        ) : (
+                            <ListView
+                                products={products}
+                                onViewDetails={handleViewDetails}
+                                onTransfer={handleOpenTransferModal}
+                                onPayLoan={handleOpenLoanPaymentModal}
+                            />
+                        )
                     )}
                 </div>
 
                 {/* Secciones adicionales */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Acciones rápidas */}
-                    <Card className="p-6">
-                        <h3 className="text-md font-medium text-gray-900 mb-4">Acciones Rápidas</h3>
-                        <div className="space-y-3">
-                            <button
-                                className="w-full flex items-center p-3 rounded-md hover:bg-gray-50 transition-colors"
-                                onClick={() => handleOpenTransferModal()}
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                                </svg>
-                                <span className="text-gray-700">Realizar transferencia</span>
-                            </button>
-                            <button
-                                className="w-full flex items-center p-3 rounded-md hover:bg-gray-50 transition-colors"
-                                onClick={() => handleOpenLoanPaymentModal()}
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                                </svg>
-                                <span className="text-gray-700">Pagar préstamo</span>
-                            </button>
-                            <button className="w-full flex items-center p-3 rounded-md hover:bg-gray-50 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                <span className="text-gray-700">Estado de cuenta</span>
-                            </button>
-                            <button className="w-full flex items-center p-3 rounded-md hover:bg-gray-50 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span className="text-gray-700">Ayuda</span>
-                            </button>
-                        </div>
-                    </Card>
+                    <QuickActions
+                        onTransfer={() => handleOpenTransferModal()}
+                        onPayLoan={() => handleOpenLoanPaymentModal()}
+                    />
 
                     {/* Notificaciones */}
-                    <Card className="p-6">
-                        <h3 className="text-md font-medium text-gray-900 mb-4">Notificaciones</h3>
-                        <div className="space-y-3">
-                            {isLoadingNotifications ? (
-                                <div className="text-center py-4">
-                                    <Spinner size="sm" className="mx-auto mb-2" />
-                                    <p className="text-sm text-gray-500">Cargando notificaciones...</p>
-                                </div>
-                            ) : notifications.length > 0 ? (
-                                notifications.map(notification => (
-                                    <div
-                                        key={notification.id}
-                                        className={`p-3 rounded-md ${
-                                            notification.type === 'info' ? 'bg-blue-50 border-l-4 border-blue-500' :
-                                                notification.type === 'warning' ? 'bg-yellow-50 border-l-4 border-yellow-500' :
-                                                    notification.type === 'success' ? 'bg-green-50 border-l-4 border-green-500' :
-                                                        notification.type === 'error' ? 'bg-red-50 border-l-4 border-red-500' :
-                                                            'bg-gray-50'
-                                        }`}
-                                    >
-                                        <h4 className={`text-sm font-medium ${
-                                            notification.type === 'info' ? 'text-blue-800' :
-                                                notification.type === 'warning' ? 'text-yellow-800' :
-                                                    notification.type === 'success' ? 'text-green-800' :
-                                                        notification.type === 'error' ? 'text-red-800' :
-                                                            'text-gray-800'
-                                        }`}>
-                                            {notification.title}
-                                        </h4>
-                                        <p className={`text-xs mt-1 ${
-                                            notification.type === 'info' ? 'text-blue-700' :
-                                                notification.type === 'warning' ? 'text-yellow-700' :
-                                                    notification.type === 'success' ? 'text-green-700' :
-                                                        notification.type === 'error' ? 'text-red-700' :
-                                                            'text-gray-600'
-                                        }`}>
-                                            {notification.message}
-                                        </p>
-                                    </div>
-                                ))
-                            ) : (
-                                <p className="text-sm text-gray-500 text-center py-4">
-                                    No tiene notificaciones nuevas
-                                </p>
-                            )}
-                        </div>
-                    </Card>
+                    <NotificationsCard
+                        notifications={notifications}
+                        isLoading={isLoadingNotifications}
+                    />
 
                     {/* Contacto */}
-                    <Card className="p-6">
-                        <h3 className="text-md font-medium text-gray-900 mb-4">Contacto</h3>
-                        <div className="space-y-3">
-                            <div className="flex items-start">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                </svg>
-                                <div>
-                                    <p className="text-sm font-medium text-gray-900">Servicio al Cliente</p>
-                                    <p className="text-sm text-gray-600">+507 300-2100</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                </svg>
-                                <div>
-                                    <p className="text-sm font-medium text-gray-900">Correo Electrónico</p>
-                                    <p className="text-sm text-gray-600">servicio@lahipotecaria.com</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 mr-3 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <div>
-                                    <p className="text-sm font-medium text-gray-900">Horario de Atención</p>
-                                    <p className="text-sm text-gray-600">Lunes a Viernes: 8:00 AM - 5:00 PM</p>
-                                </div>
-                            </div>
-                        </div>
-                    </Card>
+                    <ContactInfoCard />
                 </div>
             </main>
 
