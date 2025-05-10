@@ -4,7 +4,7 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 
 // @ts-ignore
-const FAVORITES_API_URL: string = import.meta.env.FAVORITES_API_URL || 'https://16hkp330wl.execute-api.us-east-1.amazonaws.com/dev/v1';
+const FAVORITES_API_URL: string = import.meta.env.FAVORITES_API_URL || 'https://n84jo9d898.execute-api.us-east-1.amazonaws.com/dev/v1';
 
 export enum FavoriteType {
     TRANSFER = 'TRANSFER',
