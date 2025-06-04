@@ -104,7 +104,7 @@ const LoginForm: React.FC = () => {
             </div>
 
             <div className="text-center text-sm text-gray-500 mt-4">
-                ¿No tienes una cuenta?{' '}
+                ¿No tienes una cuenta de hipotecaria?{' '}
                 <Link to="/register" className="text-primary-700 hover:text-primary-800 font-medium">
                     Regístrate
                 </Link>
